@@ -10,3 +10,4 @@ scipy
 tqdm
 einops
 boto3
+filelock

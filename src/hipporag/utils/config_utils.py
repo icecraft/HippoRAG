@@ -110,9 +110,9 @@ class BaseConfig:
         default="openie_openai_gpt",
         metadata={"help": "Class name indicating which information extraction model to use."}
     )
-    openie_mode: Literal["online", "Transformers-offline"] = field(
+    openie_mode: Literal["online"] = field(
         default="online",
-        metadata={"help": "Mode of the OpenIE model to use."}
+        metadata={"help": "Mode of the OpenIE model to use. Only 'online' mode is supported for cloud-based inference."}
     )
     skip_graph: bool = field(
         default=False,
@@ -122,8 +122,8 @@ class BaseConfig:
     
     # Embedding specific attributes
     embedding_model_name: str = field(
-        default="nvidia/NV-Embed-v2",
-        metadata={"help": "Class name indicating which embedding model to use."}
+        default="text-embedding-3-small",
+        metadata={"help": "Class name indicating which embedding model to use. Supported: OpenAI embeddings (text-embedding-*) or Cohere embeddings (cohere.*)."}
     )
     embedding_batch_size: int = field(
         default=16,

@@ -12,11 +12,7 @@ src/hipporag.egg-info/dependency_links.txt
 src/hipporag.egg-info/requires.txt
 src/hipporag.egg-info/top_level.txt
 src/hipporag/embedding_model/Cohere.py
-src/hipporag/embedding_model/Contriever.py
-src/hipporag/embedding_model/GritLM.py
-src/hipporag/embedding_model/NVEmbedV2.py
 src/hipporag/embedding_model/OpenAI.py
-src/hipporag/embedding_model/Transformers.py
 src/hipporag/embedding_model/__init__.py
 src/hipporag/embedding_model/base.py
 src/hipporag/evaluation/__init__.py
@@ -25,13 +21,10 @@ src/hipporag/evaluation/qa_eval.py
 src/hipporag/evaluation/retrieval_eval.py
 src/hipporag/information_extraction/__init__.py
 src/hipporag/information_extraction/openie_openai.py
-src/hipporag/information_extraction/openie_transformers_offline.py
 src/hipporag/llm/__init__.py
 src/hipporag/llm/base.py
 src/hipporag/llm/bedrock_llm.py
 src/hipporag/llm/openai_gpt.py
-src/hipporag/llm/transformers_llm.py
-src/hipporag/llm/transformers_offline.py
 src/hipporag/prompts/__init__.py
 src/hipporag/prompts/filter_default_prompt.py
 src/hipporag/prompts/linking.py

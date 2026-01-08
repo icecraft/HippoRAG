@@ -17,6 +17,7 @@ Requires-Dist: tenacity==8.5.0
 Requires-Dist: einops
 Requires-Dist: tqdm
 Requires-Dist: boto3
+Requires-Dist: filelock
 Dynamic: author
 Dynamic: author-email
 Dynamic: description

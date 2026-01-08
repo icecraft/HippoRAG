@@ -25,5 +25,6 @@ setuptools.setup(
         "einops", # No version specified
         "tqdm", # No version specified
         "boto3", # No version specified
+        "filelock", # No version specified
     ]
 )

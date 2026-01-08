@@ -8,7 +8,7 @@ from openai import AzureOpenAI
 
 from ..utils.config_utils import BaseConfig
 from ..utils.logging_utils import get_logger
-from .base import BaseEmbeddingModel, EmbeddingConfig, make_cache_embed
+from .base import BaseEmbeddingModel, EmbeddingConfig
 
 logger = get_logger(__name__)
 
@@ -98,10 +98,7 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             results = []
             for i in range(0, len(texts), batch_size):
                 batch = texts[i:i + batch_size]
-                try:
-                    results.append(self.encode(batch))
-                except:
-                    import ipdb; ipdb.set_trace()
+                results.append(self.encode(batch))
                 pbar.update(batch_size)
             pbar.close()
             results = np.concatenate(results)

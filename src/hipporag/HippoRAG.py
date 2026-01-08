@@ -1,18 +1,12 @@
 import json
 import os
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
-from typing import Union, Optional, List, Set, Dict, Any, Tuple, Literal
+from dataclasses import asdict
+from typing import List, Set, Dict, Tuple
 import numpy as np
-import importlib
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
-from igraph import Graph
 import igraph as ig
-import numpy as np
-from collections import defaultdict
 import re
 import time
 
@@ -20,7 +14,6 @@ from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
 from .embedding_store import EmbeddingStore
 from .information_extraction import OpenIE
-from .information_extraction.openie_transformers_offline import TransformersOfflineOpenIE
 from .evaluation.retrieval_eval import RetrievalRecall
 from .evaluation.qa_eval import QAExactMatch, QAF1Score
 from .prompts.linking import get_query_instruction
@@ -55,8 +48,7 @@ class HippoRAG:
                 to `outputs` if no value is provided.
             llm_model (BaseLLM): The language model used for processing based on the global
                 configuration settings.
-            openie (Union[OpenIE, TransformersOfflineOpenIE]): The Open Information Extraction module
-                configured in either online or Transformers-offline mode based on the global settings.
+            openie (OpenIE): The Open Information Extraction module configured for online mode.
             graph: The graph instance initialized by the `initialize_graph` method.
             embedding_model (BaseEmbeddingModel): The embedding model associated with the current
                 configuration.
@@ -124,8 +116,8 @@ class HippoRAG:
 
         if self.global_config.openie_mode == 'online':
             self.openie = OpenIE(llm_model=self.llm_model)
-        elif self.global_config.openie_mode ==  'Transformers-offline':
-            self.openie = TransformersOfflineOpenIE(self.global_config)
+        else:
+            raise ValueError(f"Unsupported openie_mode: {self.global_config.openie_mode}. Only 'online' mode is supported.")
 
         self.graph = self.initialize_graph()
 
@@ -190,24 +182,6 @@ class HippoRAG:
             )
             return preloaded_graph
 
-    def pre_openie(self,  docs: List[str]):
-        logger.info(f"Indexing Documents")
-        logger.info(f"Performing OpenIE Offline")
-
-        chunks = self.chunk_embedding_store.get_missing_string_hash_ids(docs)
-
-        all_openie_info, chunk_keys_to_process = self.load_existing_openie(chunks.keys())
-        new_openie_rows = {k : chunks[k] for k in chunk_keys_to_process}
-
-        if len(chunk_keys_to_process) > 0:
-            new_ner_results_dict, new_triple_results_dict = self.openie.batch_openie(new_openie_rows)
-            self.merge_openie_results(all_openie_info, new_openie_rows, new_ner_results_dict, new_triple_results_dict)
-
-        if self.global_config.save_openie:
-            self.save_openie_results(all_openie_info)
-
-        assert False, logger.info('Done with OpenIE, run online indexing for future retrieval.')
-
     def index(self, docs: List[str]):
         """
         Indexes the given documents based on the HippoRAG 2 framework which generates an OpenIE knowledge graph
@@ -221,9 +195,6 @@ class HippoRAG:
         logger.info(f"Indexing Documents")
 
         logger.info(f"Performing OpenIE")
-
-        if self.global_config.openie_mode == 'offline':
-            self.pre_openie(docs)
 
         self.chunk_embedding_store.insert_strings(docs)
         chunk_to_rows = self.chunk_embedding_store.get_all_id_to_rows()
