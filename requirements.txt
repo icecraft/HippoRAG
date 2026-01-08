@@ -11,3 +11,4 @@ tqdm
 einops
 boto3
 filelock
+python-dotenv
