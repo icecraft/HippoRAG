@@ -2,9 +2,7 @@ from copy import deepcopy
 from typing import List, Optional
 
 import numpy as np
-import torch
 from tqdm import tqdm
-from transformers import AutoModel
 from openai import OpenAI
 from openai import AzureOpenAI
 
@@ -108,9 +106,6 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
             pbar.close()
             results = np.concatenate(results)
 
-        if isinstance(results, torch.Tensor):
-            results = results.cpu()
-            results = results.numpy()
         if self.embedding_config.norm:
             results = (results.T / np.linalg.norm(results, axis=1)).T
 

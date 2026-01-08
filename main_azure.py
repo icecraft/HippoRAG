@@ -80,8 +80,8 @@ def main():
     parser.add_argument('--force_index_from_scratch', type=str, default='false',
                         help='If set to True, will ignore all existing storage files and graph data and will rebuild from scratch.')
     parser.add_argument('--force_openie_from_scratch', type=str, default='false', help='If set to False, will try to first reuse openie results for the corpus if they exist.')
-    parser.add_argument('--openie_mode', choices=['online', 'offline'], default='online',
-                        help="OpenIE mode, offline denotes using VLLM offline batch mode for indexing, while online denotes")
+    parser.add_argument('--openie_mode', choices=['online', 'Transformers-offline'], default='online',
+                        help="OpenIE mode. 'online' uses OpenAI API, 'Transformers-offline' uses local Transformers model.")
     parser.add_argument('--save_dir', type=str, default='outputs', help='Save directory')
     args = parser.parse_args()
 

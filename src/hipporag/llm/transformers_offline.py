@@ -27,7 +27,6 @@ def convert_text_chat_messages_to_input_string(messages: List[TextChatMessage], 
     )
     return prompt
 
-from vllm import SamplingParams
 class TransformersOffline:
 
     def _init_llm_config(self) -> None:

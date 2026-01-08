@@ -19,7 +19,7 @@ class TransformersOfflineOpenIE(OpenIE):
 
     def batch_openie(self, chunks: Dict[str, ChunkInfo]) -> Tuple[Dict[str, NerRawOutput], Dict[str, TripleRawOutput]]:
         """
-        Conduct batch OpenIE synchronously using vLLM offline batch mode, including NER and triple extraction
+        Conduct batch OpenIE synchronously using Transformers offline batch mode, including NER and triple extraction
 
         Args:
             chunks (Dict[str, ChunkInfo]): chunks to be incorporated into graph. Each key is a hashed chunk

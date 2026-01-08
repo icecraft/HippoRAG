@@ -108,7 +108,7 @@ from filelock import FileLock
 import sqlite3
 import hashlib
 import os
-import torch
+
 def make_cache_embed(encode_func, cache_file_name, device):
     def wrapper(**kwargs):
         # FOCUS_KEYS = ["instruction", "prompts", "max_length"]
@@ -166,23 +166,20 @@ def make_cache_embed(encode_func, cache_file_name, device):
                     for i in missed_prompts:
                         hash_str = hash_strs[i]
                         emb = embeddings[i]
-                        # Convert torch tensor to numpy bytes if necessary.
-                        if isinstance(emb, torch.Tensor):
-                            emb_bytes = emb.cpu().numpy().tobytes()
-                        else:
-                            emb_bytes = emb.tobytes()
+                        # Convert to numpy bytes
+                        if not isinstance(emb, np.ndarray):
+                            emb = np.array(emb)
+                        emb_bytes = emb.tobytes()
                         cursor.execute('INSERT INTO embeddings (hash, embedding) VALUES (?, ?)', (hash_str, emb_bytes))
                     conn.commit()
 
-        # Convert all embeddings to torch tensors if they're not already
+        # Convert all embeddings to numpy arrays if they're not already
         final_embeddings = [
-            emb if isinstance(emb, torch.Tensor) else torch.Tensor(emb.copy())
+            emb if isinstance(emb, np.ndarray) else np.array(emb)
             for emb in embeddings
         ]
-
-        final_embeddings = [emb.to(device) for emb in final_embeddings]
-        # Return a 2D tensor where each row is an embedding.
-        return torch.stack(final_embeddings)
+        # Return a 2D numpy array where each row is an embedding.
+        return np.stack(final_embeddings)
 
     return wrapper
     

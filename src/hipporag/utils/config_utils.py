@@ -110,13 +110,13 @@ class BaseConfig:
         default="openie_openai_gpt",
         metadata={"help": "Class name indicating which information extraction model to use."}
     )
-    openie_mode: Literal["offline", "online"] = field(
+    openie_mode: Literal["online", "Transformers-offline"] = field(
         default="online",
         metadata={"help": "Mode of the OpenIE model to use."}
     )
     skip_graph: bool = field(
         default=False,
-        metadata={"help": "Whether to skip graph construction or not. Set it to be true when running vllm offline indexing for the first time."}
+        metadata={"help": "Whether to skip graph construction or not."}
     )
     
     

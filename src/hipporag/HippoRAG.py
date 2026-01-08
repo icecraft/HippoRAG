@@ -7,7 +7,6 @@ from typing import Union, Optional, List, Set, Dict, Any, Tuple, Literal
 import numpy as np
 import importlib
 from collections import defaultdict
-from transformers import HfArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from igraph import Graph
@@ -21,7 +20,6 @@ from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
 from .embedding_store import EmbeddingStore
 from .information_extraction import OpenIE
-from .information_extraction.openie_vllm_offline import VLLMOfflineOpenIE
 from .information_extraction.openie_transformers_offline import TransformersOfflineOpenIE
 from .evaluation.retrieval_eval import RetrievalRecall
 from .evaluation.qa_eval import QAExactMatch, QAF1Score
@@ -57,8 +55,8 @@ class HippoRAG:
                 to `outputs` if no value is provided.
             llm_model (BaseLLM): The language model used for processing based on the global
                 configuration settings.
-            openie (Union[OpenIE, VLLMOfflineOpenIE]): The Open Information Extraction module
-                configured in either online or offline mode based on the global settings.
+            openie (Union[OpenIE, TransformersOfflineOpenIE]): The Open Information Extraction module
+                configured in either online or Transformers-offline mode based on the global settings.
             graph: The graph instance initialized by the `initialize_graph` method.
             embedding_model (BaseEmbeddingModel): The embedding model associated with the current
                 configuration.
@@ -126,19 +124,14 @@ class HippoRAG:
 
         if self.global_config.openie_mode == 'online':
             self.openie = OpenIE(llm_model=self.llm_model)
-        elif self.global_config.openie_mode == 'offline':
-            self.openie = VLLMOfflineOpenIE(self.global_config)
         elif self.global_config.openie_mode ==  'Transformers-offline':
             self.openie = TransformersOfflineOpenIE(self.global_config)
 
         self.graph = self.initialize_graph()
 
-        if self.global_config.openie_mode == 'offline':
-            self.embedding_model = None
-        else:
-            self.embedding_model: BaseEmbeddingModel = _get_embedding_model_class(
-                embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
-                                                                              embedding_model_name=self.global_config.embedding_model_name)
+        self.embedding_model: BaseEmbeddingModel = _get_embedding_model_class(
+            embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
+                                                                          embedding_model_name=self.global_config.embedding_model_name)
         self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
                                                     os.path.join(self.working_dir, "chunk_embeddings"),
                                                     self.global_config.embedding_batch_size, 'chunk')
