@@ -85,8 +85,10 @@ def ingest_chapters(
         save_openie=True
     )
     
+    print(config)
     # Initialize HippoRAG
     hipporag = HippoRAG(global_config=config)
+    
     
     # Index chapters
     logger.info("Starting indexing...")
@@ -126,6 +128,7 @@ def main():
     
     args = parser.parse_args()
     
+    print(os.environ)
     # Load configuration from .env file (with defaults if not set)
     llm_name = os.getenv('LLM_NAME', 'gpt-4o-mini')
     embedding_name = os.getenv('EMBEDDING_NAME', 'text-embedding-3-small')

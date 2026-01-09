@@ -12,3 +12,5 @@ einops
 boto3
 filelock
 python-dotenv
+pyarrow
+fastparquet

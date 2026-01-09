@@ -26,5 +26,7 @@ setuptools.setup(
         "tqdm", # No version specified
         "boto3", # No version specified
         "filelock", # No version specified
+        "pyarrow", # No version specified
+        "fastparquet", # No version specified
     ]
 )
