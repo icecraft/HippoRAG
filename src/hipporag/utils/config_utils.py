@@ -123,7 +123,7 @@ class BaseConfig:
     # Embedding specific attributes
     embedding_model_name: str = field(
         default="text-embedding-3-small",
-        metadata={"help": "Class name indicating which embedding model to use. Supported: OpenAI embeddings (text-embedding-*) or Cohere embeddings (cohere.*)."}
+        metadata={"help": "Class name indicating which embedding model to use. Supported: OpenAI-compatible embeddings (text-embedding-*)."}
     )
     embedding_batch_size: int = field(
         default=16,
