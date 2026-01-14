@@ -161,10 +161,6 @@ class HippoRAG:
 
         self.rerank_filter = DSPyFilter(self)
 
-        # Initialize shared data structures
-        self.node_to_node_stats = {}
-        self.ent_node_to_chunk_ids = {}
-
         # Initialize modular components
         self.graph_manager = GraphManager(
             global_config=self.global_config,
@@ -229,8 +225,13 @@ class HippoRAG:
         self.rerank_time = 0
         self.all_retrieval_time = 0
 
-        # Sync timing stats with retriever
-        self._sync_timing_stats()
+    def _sync_timing_stats(self):
+        """Sync timing statistics from retriever to main class for backward compatibility."""
+        if hasattr(self, 'retriever') and hasattr(self.retriever, 'ppr_time'):
+            self.ppr_time = self.retriever.ppr_time
+            self.rerank_time = self.retriever.rerank_time
+            self.all_retrieval_time = self.retriever.all_retrieval_time
+            self.ready_to_retrieve = self.retriever.ready_to_retrieve
 
 
     def initialize_graph(self):
