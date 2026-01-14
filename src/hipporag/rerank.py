@@ -7,6 +7,9 @@ from typing import Union, Optional, List, Dict, Any, Tuple, Literal
 import re
 import ast
 from .prompts.filter_default_prompt import best_dspy_prompt
+from .utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 class Fact(BaseModel):
     fact: list[list[str]] = Field(description="A list of facts, each fact is a list of 3 strings: [subject, predicate, object]")
@@ -122,9 +125,11 @@ class DSPyFilter:
         for generated_fact in generated_facts:
             closest_matched_fact = difflib.get_close_matches(str(generated_fact), [str(i) for i in candidate_items], n=1, cutoff=0.0)[0]
             try:
-                result_indices.append(candidate_items.index(eval(closest_matched_fact)))
-            except Exception as e:
-                print('result_indices exception', e)
+                # Use ast.literal_eval for safe parsing of literal Python structures
+                parsed_fact = ast.literal_eval(closest_matched_fact)
+                result_indices.append(candidate_items.index(parsed_fact))
+            except (ValueError, SyntaxError, IndexError) as e:
+                logger.warning(f'Failed to parse or find matched fact: {e}')
 
         sorted_candidate_indices = [candidate_indices[i] for i in result_indices]
         sorted_candidate_items = [candidate_items[i] for i in result_indices]

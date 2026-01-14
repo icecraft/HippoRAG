@@ -25,6 +25,13 @@ from .utils.embed_utils import retrieve_knn
 from .utils.typing import Triple
 from .utils.config_utils import BaseConfig
 
+# Import new modular components
+from .graph import GraphManager, GraphBuilder
+from .retrieval import Retriever
+from .indexing import Indexer
+from .qa import QAEngine
+from .information_extraction.openie_manager import OpenIEManager
+
 logger = logging.getLogger(__name__)
 
 class HippoRAG:
@@ -119,7 +126,21 @@ class HippoRAG:
         else:
             raise ValueError(f"Unsupported openie_mode: {self.global_config.openie_mode}. Only 'online' mode is supported.")
 
-        self.graph = self.initialize_graph()
+        # Initialize shared data structures first
+        self.node_to_node_stats = {}
+        self.ent_node_to_chunk_ids = {}
+        
+        # Initialize graph (temporary GraphManager for initialization)
+        temp_graph_manager = GraphManager(
+            global_config=self.global_config,
+            working_dir=self.working_dir,
+            graph=None,  # Will be created
+            entity_embedding_store=None,  # Not needed for initialization
+            chunk_embedding_store=None,
+            fact_embedding_store=None,
+            node_to_node_stats=self.node_to_node_stats
+        )
+        self.graph = temp_graph_manager.initialize_graph()
 
         self.embedding_model: BaseEmbeddingModel = _get_embedding_model_class(
             embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
@@ -140,47 +161,87 @@ class HippoRAG:
 
         self.rerank_filter = DSPyFilter(self)
 
-        self.ready_to_retrieve = False
+        # Initialize shared data structures
+        self.node_to_node_stats = {}
+        self.ent_node_to_chunk_ids = {}
 
+        # Initialize modular components
+        self.graph_manager = GraphManager(
+            global_config=self.global_config,
+            working_dir=self.working_dir,
+            graph=self.graph,
+            entity_embedding_store=self.entity_embedding_store,
+            chunk_embedding_store=self.chunk_embedding_store,
+            fact_embedding_store=self.fact_embedding_store,
+            node_to_node_stats=self.node_to_node_stats
+        )
+        
+        self.graph_builder = GraphBuilder(
+            graph=self.graph,
+            entity_embedding_store=self.entity_embedding_store,
+            chunk_embedding_store=self.chunk_embedding_store,
+            node_to_node_stats=self.node_to_node_stats
+        )
+        
+        self.openie_manager = OpenIEManager(
+            global_config=self.global_config,
+            openie_results_path=self.openie_results_path
+        )
+        
+        self.retriever = Retriever(
+            global_config=self.global_config,
+            chunk_embedding_store=self.chunk_embedding_store,
+            entity_embedding_store=self.entity_embedding_store,
+            fact_embedding_store=self.fact_embedding_store,
+            embedding_model=self.embedding_model,
+            graph=self.graph,
+            graph_builder=self.graph_builder,
+            graph_manager=self.graph_manager,
+            openie_manager=self.openie_manager,
+            rerank_filter=self.rerank_filter,
+            node_to_node_stats=self.node_to_node_stats,
+            ent_node_to_chunk_ids=self.ent_node_to_chunk_ids
+        )
+        
+        self.indexer = Indexer(
+            global_config=self.global_config,
+            chunk_embedding_store=self.chunk_embedding_store,
+            entity_embedding_store=self.entity_embedding_store,
+            fact_embedding_store=self.fact_embedding_store,
+            openie=self.openie,
+            openie_manager=self.openie_manager,
+            graph=self.graph,
+            graph_builder=self.graph_builder,
+            graph_manager=self.graph_manager,
+            node_to_node_stats=self.node_to_node_stats,
+            ent_node_to_chunk_ids=self.ent_node_to_chunk_ids
+        )
+        
+        self.qa_engine = QAEngine(
+            global_config=self.global_config,
+            llm_model=self.llm_model,
+            prompt_template_manager=self.prompt_template_manager
+        )
+
+        # Legacy attributes for backward compatibility (will be synced with retriever)
+        self.ready_to_retrieve = False
         self.ppr_time = 0
         self.rerank_time = 0
         self.all_retrieval_time = 0
-
-        self.ent_node_to_chunk_ids = None
+        
+        # Sync timing stats with retriever
+        self._sync_timing_stats()
 
 
     def initialize_graph(self):
         """
         Initializes a graph using a Pickle file if available or creates a new graph.
-
-        The function attempts to load a pre-existing graph stored in a Pickle file. If the file
-        is not present or the graph needs to be created from scratch, it initializes a new directed
-        or undirected graph based on the global configuration. If the graph is loaded successfully
-        from the file, pertinent information about the graph (number of nodes and edges) is logged.
+        Delegates to GraphManager.
 
         Returns:
             ig.Graph: A pre-loaded or newly initialized graph.
-
-        Raises:
-            None
         """
-        self._graph_pickle_filename = os.path.join(
-            self.working_dir, f"graph.pickle"
-        )
-
-        preloaded_graph = None
-
-        if not self.global_config.force_index_from_scratch:
-            if os.path.exists(self._graph_pickle_filename):
-                preloaded_graph = ig.Graph.Read_Pickle(self._graph_pickle_filename)
-
-        if preloaded_graph is None:
-            return ig.Graph(directed=self.global_config.is_directed_graph)
-        else:
-            logger.info(
-                f"Loaded graph from {self._graph_pickle_filename} with {preloaded_graph.vcount()} nodes, {preloaded_graph.ecount()} edges"
-            )
-            return preloaded_graph
+        return self.graph_manager.initialize_graph()
 
     def index(self, docs: List[str]):
         """
@@ -191,55 +252,7 @@ class HippoRAG:
             docs : List[str]
                 A list of documents to be indexed.
         """
-
-        logger.info(f"Indexing Documents")
-
-        logger.info(f"Performing OpenIE")
-
-        self.chunk_embedding_store.insert_strings(docs)
-        chunk_to_rows = self.chunk_embedding_store.get_all_id_to_rows()
-
-        all_openie_info, chunk_keys_to_process = self.load_existing_openie(chunk_to_rows.keys())
-        new_openie_rows = {k : chunk_to_rows[k] for k in chunk_keys_to_process}
-
-        if len(chunk_keys_to_process) > 0:
-            new_ner_results_dict, new_triple_results_dict = self.openie.batch_openie(new_openie_rows)
-            self.merge_openie_results(all_openie_info, new_openie_rows, new_ner_results_dict, new_triple_results_dict)
-
-        if self.global_config.save_openie:
-            self.save_openie_results(all_openie_info)
-
-        ner_results_dict, triple_results_dict = reformat_openie_results(all_openie_info)
-
-        assert len(chunk_to_rows) == len(ner_results_dict) == len(triple_results_dict), f"len(chunk_to_rows): {len(chunk_to_rows)}, len(ner_results_dict): {len(ner_results_dict)}, len(triple_results_dict): {len(triple_results_dict)}"
-
-        # prepare data_store
-        chunk_ids = list(chunk_to_rows.keys())
-
-        chunk_triples = [[text_processing(t) for t in triple_results_dict[chunk_id].triples] for chunk_id in chunk_ids]
-        entity_nodes, chunk_triple_entities = extract_entity_nodes(chunk_triples)
-        facts = flatten_facts(chunk_triples)
-
-        logger.info(f"Encoding Entities")
-        self.entity_embedding_store.insert_strings(entity_nodes)
-
-        logger.info(f"Encoding Facts")
-        self.fact_embedding_store.insert_strings([str(fact) for fact in facts])
-
-        logger.info(f"Constructing Graph")
-
-        self.node_to_node_stats = {}
-        self.ent_node_to_chunk_ids = {}
-
-        self.add_fact_edges(chunk_ids, chunk_triples)
-        num_new_chunks = self.add_passage_edges(chunk_ids, chunk_triple_entities)
-
-        if num_new_chunks > 0:
-            logger.info(f"Found {num_new_chunks} new chunks to save into graph.")
-            self.add_synonymy_edges()
-
-            self.augment_graph()
-            self.save_igraph()
+        self.indexer.index(docs)
 
     def delete(self, docs_to_delete: List[str]):
         """
@@ -247,82 +260,18 @@ class HippoRAG:
         Note that triples and entities which are indexed from chunks that are not being removed will not be removed.
 
         Parameters:
-            docs : List[str]
+            docs_to_delete : List[str]
                 A list of documents to be deleted.
         """
-
-        #Making sure that all the necessary structures have been built.
-        if not self.ready_to_retrieve:
-            self.prepare_retrieval_objects()
-
-        current_docs = set(self.chunk_embedding_store.get_all_texts())
-        docs_to_delete = [doc for doc in docs_to_delete if doc in current_docs]
-
-        #Get ids for chunks to delete
-        chunk_ids_to_delete = set(
-            [self.chunk_embedding_store.text_to_hash_id[chunk] for chunk in docs_to_delete])
-
-        #Find triples in chunks to delete
-        all_openie_info, chunk_keys_to_process = self.load_existing_openie([])
-        triples_to_delete = []
-
-        all_openie_info_with_deletes = []
-
-        for openie_doc in all_openie_info:
-            if openie_doc['idx'] in chunk_ids_to_delete:
-                triples_to_delete.append(openie_doc['extracted_triples'])
-            else:
-                all_openie_info_with_deletes.append(openie_doc)
-
-        triples_to_delete = flatten_facts(triples_to_delete)
-
-        #Filter out triples that appear in unaltered chunks
-        true_triples_to_delete = []
-
-        for triple in triples_to_delete:
-            proc_triple = tuple(text_processing(list(triple)))
-
-            doc_ids = self.proc_triples_to_docs[str(proc_triple)]
-
-            non_deleted_docs = doc_ids.difference(chunk_ids_to_delete)
-
-            if len(non_deleted_docs) == 0:
-                true_triples_to_delete.append(triple)
-
-        processed_true_triples_to_delete = [[text_processing(list(triple)) for triple in true_triples_to_delete]]
-        entities_to_delete, _ = extract_entity_nodes(processed_true_triples_to_delete)
-        processed_true_triples_to_delete = flatten_facts(processed_true_triples_to_delete)
-
-        triple_ids_to_delete = set([self.fact_embedding_store.text_to_hash_id[str(triple)] for triple in processed_true_triples_to_delete])
-
-        #Filter out entities that appear in unaltered chunks
-        ent_ids_to_delete = [self.entity_embedding_store.text_to_hash_id[ent] for ent in entities_to_delete]
-
-        filtered_ent_ids_to_delete = []
-
-        for ent_node in ent_ids_to_delete:
-            doc_ids = self.ent_node_to_chunk_ids[ent_node]
-
-            non_deleted_docs = doc_ids.difference(chunk_ids_to_delete)
-
-            if len(non_deleted_docs) == 0:
-                filtered_ent_ids_to_delete.append(ent_node)
-
-        logger.info(f"Deleting {len(chunk_ids_to_delete)} Chunks")
-        logger.info(f"Deleting {len(triple_ids_to_delete)} Triples")
-        logger.info(f"Deleting {len(filtered_ent_ids_to_delete)} Entities")
-
-        self.save_openie_results(all_openie_info_with_deletes)
-
-        self.entity_embedding_store.delete(filtered_ent_ids_to_delete)
-        self.fact_embedding_store.delete(triple_ids_to_delete)
-        self.chunk_embedding_store.delete(chunk_ids_to_delete)
-
-        #Delete Nodes from Graph
-        self.graph.delete_vertices(list(filtered_ent_ids_to_delete) + list(chunk_ids_to_delete))
-        self.save_igraph()
-
+        self.indexer.delete(
+            docs_to_delete=docs_to_delete,
+            ready_to_retrieve=self.ready_to_retrieve,
+            prepare_retrieval_objects_func=self.prepare_retrieval_objects,
+            proc_triples_to_docs=self.retriever.proc_triples_to_docs if hasattr(self, 'retriever') and hasattr(self.retriever, 'proc_triples_to_docs') else {}
+        )
         self.ready_to_retrieve = False
+        if hasattr(self, 'retriever'):
+            self.retriever.ready_to_retrieve = False
 
     def retrieve(self,
                  queries: List[str],
@@ -355,62 +304,9 @@ class HippoRAG:
         -----
         - Long queries with no relevant facts after reranking will default to results from dense passage retrieval.
         """
-        retrieve_start_time = time.time()  # Record start time
-
-        if num_to_retrieve is None:
-            num_to_retrieve = self.global_config.retrieval_top_k
-
-        if gold_docs is not None:
-            retrieval_recall_evaluator = RetrievalRecall(global_config=self.global_config)
-
-        if not self.ready_to_retrieve:
-            self.prepare_retrieval_objects()
-
-        self.get_query_embeddings(queries)
-
-        retrieval_results = []
-
-        for q_idx, query in tqdm(enumerate(queries), desc="Retrieving", total=len(queries)):
-            rerank_start = time.time()
-            query_fact_scores = self.get_fact_scores(query)
-            top_k_fact_indices, top_k_facts, rerank_log = self.rerank_facts(query, query_fact_scores)
-            rerank_end = time.time()
-
-            self.rerank_time += rerank_end - rerank_start
-
-            if len(top_k_facts) == 0:
-                logger.info('No facts found after reranking, return DPR results')
-                sorted_doc_ids, sorted_doc_scores = self.dense_passage_retrieval(query)
-            else:
-                sorted_doc_ids, sorted_doc_scores = self.graph_search_with_fact_entities(query=query,
-                                                                                         link_top_k=self.global_config.linking_top_k,
-                                                                                         query_fact_scores=query_fact_scores,
-                                                                                         top_k_facts=top_k_facts,
-                                                                                         top_k_fact_indices=top_k_fact_indices,
-                                                                                         passage_node_weight=self.global_config.passage_node_weight)
-
-            top_k_docs = [self.chunk_embedding_store.get_row(self.passage_node_keys[idx])["content"] for idx in sorted_doc_ids[:num_to_retrieve]]
-
-            retrieval_results.append(QuerySolution(question=query, docs=top_k_docs, doc_scores=sorted_doc_scores[:num_to_retrieve]))
-
-        retrieve_end_time = time.time()  # Record end time
-
-        self.all_retrieval_time += retrieve_end_time - retrieve_start_time
-
-        logger.info(f"Total Retrieval Time {self.all_retrieval_time:.2f}s")
-        logger.info(f"Total Recognition Memory Time {self.rerank_time:.2f}s")
-        logger.info(f"Total PPR Time {self.ppr_time:.2f}s")
-        logger.info(f"Total Misc Time {self.all_retrieval_time - (self.rerank_time + self.ppr_time):.2f}s")
-
-        # Evaluate retrieval
-        if gold_docs is not None:
-            k_list = [1, 2, 5, 10, 20, 30, 50, 100, 150, 200]
-            overall_retrieval_result, example_retrieval_results = retrieval_recall_evaluator.calculate_metric_scores(gold_docs=gold_docs, retrieved_docs=[retrieval_result.docs for retrieval_result in retrieval_results], k_list=k_list)
-            logger.info(f"Evaluation results for retrieval: {overall_retrieval_result}")
-
-            return retrieval_results, overall_retrieval_result
-        else:
-            return retrieval_results
+        result = self.retriever.retrieve(queries, num_to_retrieve, gold_docs)
+        self._sync_timing_stats()
+        return result
 
     def rag_qa(self,
                queries: List[str|QuerySolution],
@@ -459,7 +355,7 @@ class HippoRAG:
                 queries = self.retrieve(queries=queries)
 
         # Performing QA
-        queries_solutions, all_response_message, all_metadata = self.qa(queries)
+        queries_solutions, all_response_message, all_metadata = self.qa_engine.qa(queries)
 
         # Evaluating QA
         if gold_answers is not None:
@@ -514,48 +410,9 @@ class HippoRAG:
         -----
         - Long queries with no relevant facts after reranking will default to results from dense passage retrieval.
         """
-        retrieve_start_time = time.time()  # Record start time
-
-        if num_to_retrieve is None:
-            num_to_retrieve = self.global_config.retrieval_top_k
-
-        if gold_docs is not None:
-            retrieval_recall_evaluator = RetrievalRecall(global_config=self.global_config)
-
-        if not self.ready_to_retrieve:
-            self.prepare_retrieval_objects()
-
-        self.get_query_embeddings(queries)
-
-        retrieval_results = []
-
-        for q_idx, query in tqdm(enumerate(queries), desc="Retrieving", total=len(queries)):
-            logger.info('No facts found after reranking, return DPR results')
-            sorted_doc_ids, sorted_doc_scores = self.dense_passage_retrieval(query)
-
-            top_k_docs = [self.chunk_embedding_store.get_row(self.passage_node_keys[idx])["content"] for idx in
-                          sorted_doc_ids[:num_to_retrieve]]
-
-            retrieval_results.append(
-                QuerySolution(question=query, docs=top_k_docs, doc_scores=sorted_doc_scores[:num_to_retrieve]))
-
-        retrieve_end_time = time.time()  # Record end time
-
-        self.all_retrieval_time += retrieve_end_time - retrieve_start_time
-
-        logger.info(f"Total Retrieval Time {self.all_retrieval_time:.2f}s")
-
-        # Evaluate retrieval
-        if gold_docs is not None:
-            k_list = [1, 2, 5, 10, 20, 30, 50, 100, 150, 200]
-            overall_retrieval_result, example_retrieval_results = retrieval_recall_evaluator.calculate_metric_scores(
-                gold_docs=gold_docs, retrieved_docs=[retrieval_result.docs for retrieval_result in retrieval_results],
-                k_list=k_list)
-            logger.info(f"Evaluation results for retrieval: {overall_retrieval_result}")
-
-            return retrieval_results, overall_retrieval_result
-        else:
-            return retrieval_results
+        result = self.retriever.retrieve_dpr(queries, num_to_retrieve, gold_docs)
+        self._sync_timing_stats()
+        return result
 
     def rag_qa_dpr(self,
                queries: List[str|QuerySolution],
@@ -604,7 +461,7 @@ class HippoRAG:
                 queries = self.retrieve_dpr(queries=queries)
 
         # Performing QA
-        queries_solutions, all_response_message, all_metadata = self.qa(queries)
+        queries_solutions, all_response_message, all_metadata = self.qa_engine.qa(queries)
 
         # Evaluating QA
         if gold_answers is not None:
@@ -646,51 +503,13 @@ class HippoRAG:
                 - A list of raw response messages from the language model.
                 - A list of metadata dictionaries associated with the results.
         """
-        #Running inference for QA
-        all_qa_messages = []
-
-        for query_solution in tqdm(queries, desc="Collecting QA prompts"):
-
-            # obtain the retrieved docs
-            retrieved_passages = query_solution.docs[:self.global_config.qa_top_k]
-
-            prompt_user = ''
-            for passage in retrieved_passages:
-                prompt_user += f'Wikipedia Title: {passage}\n\n'
-            prompt_user += 'Question: ' + query_solution.question + '\nThought: '
-
-            if self.prompt_template_manager.is_template_name_valid(name=f'rag_qa_{self.global_config.dataset}'):
-                # find the corresponding prompt for this dataset
-                prompt_dataset_name = self.global_config.dataset
-            else:
-                # the dataset does not have a customized prompt template yet
-                logger.debug(
-                    f"rag_qa_{self.global_config.dataset} does not have a customized prompt template. Using MUSIQUE's prompt template instead.")
-                prompt_dataset_name = 'musique'
-            all_qa_messages.append(
-                self.prompt_template_manager.render(name=f'rag_qa_{prompt_dataset_name}', prompt_user=prompt_user))
-
-        all_qa_results = [self.llm_model.infer(qa_messages) for qa_messages in tqdm(all_qa_messages, desc="QA Reading")]
-
-        all_response_message, all_metadata, all_cache_hit = zip(*all_qa_results)
-        all_response_message, all_metadata = list(all_response_message), list(all_metadata)
-
-        #Process responses and extract predicted answers.
-        queries_solutions = []
-        for query_solution_idx, query_solution in tqdm(enumerate(queries), desc="Extraction Answers from LLM Response"):
-            response_content = all_response_message[query_solution_idx]
-            try:
-                pred_ans = response_content.split('Answer:')[1].strip()
-            except Exception as e:
-                logger.warning(f"Error in parsing the answer from the raw LLM QA inference response: {str(e)}!")
-                pred_ans = response_content
-
-            query_solution.answer = pred_ans
-            queries_solutions.append(query_solution)
-
-        return queries_solutions, all_response_message, all_metadata
+        return self.qa_engine.qa(queries)
 
     def add_fact_edges(self, chunk_ids: List[str], chunk_triples: List[Tuple]):
+        """Delegate to GraphBuilder."""
+        return self.graph_builder.add_fact_edges(chunk_ids, chunk_triples, self.ent_node_to_chunk_ids)
+    
+    def _add_fact_edges_legacy(self, chunk_ids: List[str], chunk_triples: List[Tuple]):
         """
         Adds fact edges from given triples to the graph.
 
@@ -739,6 +558,10 @@ class HippoRAG:
                     self.ent_node_to_chunk_ids[node] = self.ent_node_to_chunk_ids.get(node, set()).union(set([chunk_key]))
 
     def add_passage_edges(self, chunk_ids: List[str], chunk_triple_entities: List[List[str]]):
+        """Delegate to GraphBuilder."""
+        return self.graph_builder.add_passage_edges(chunk_ids, chunk_triple_entities)
+    
+    def _add_passage_edges_legacy(self, chunk_ids: List[str], chunk_triple_entities: List[List[str]]):
         """
         Adds edges connecting passage nodes to phrase nodes in the graph.
 
@@ -783,6 +606,10 @@ class HippoRAG:
         return num_new_chunks
 
     def add_synonymy_edges(self):
+        """Delegate to GraphBuilder."""
+        return self.graph_builder.add_synonymy_edges(self.entity_embedding_store, self.global_config)
+    
+    def _add_synonymy_edges_legacy(self):
         """
         Adds synonymy edges between similar nodes in the graph to enhance connectivity by identifying and linking synonym entities.
 
@@ -846,6 +673,10 @@ class HippoRAG:
             synonym_candidates.append((node_key, synonyms))
 
     def load_existing_openie(self, chunk_keys: List[str]) -> Tuple[List[dict], Set[str]]:
+        """Delegate to OpenIEManager."""
+        return self.openie_manager.load_existing_openie(chunk_keys)
+    
+    def _load_existing_openie_legacy(self, chunk_keys: List[str]) -> Tuple[List[dict], Set[str]]:
         """
         Loads existing OpenIE results from the specified file if it exists and combines
         them with new content while standardizing indices. If the file does not exist or
@@ -895,6 +726,14 @@ class HippoRAG:
                              chunks_to_save: Dict[str, dict],
                              ner_results_dict: Dict[str, NerRawOutput],
                              triple_results_dict: Dict[str, TripleRawOutput]) -> List[dict]:
+        """Delegate to OpenIEManager."""
+        return self.openie_manager.merge_openie_results(all_openie_info, chunks_to_save, ner_results_dict, triple_results_dict)
+    
+    def _merge_openie_results_legacy(self,
+                             all_openie_info: List[dict],
+                             chunks_to_save: Dict[str, dict],
+                             ner_results_dict: Dict[str, NerRawOutput],
+                             triple_results_dict: Dict[str, TripleRawOutput]) -> List[dict]:
         """
         Merges OpenIE extraction results with corresponding passage and metadata.
 
@@ -936,6 +775,10 @@ class HippoRAG:
         return all_openie_info
 
     def save_openie_results(self, all_openie_info: List[dict]):
+        """Delegate to OpenIEManager."""
+        return self.openie_manager.save_openie_results(all_openie_info)
+    
+    def _save_openie_results_legacy(self, all_openie_info: List[dict]):
         """
         Computes statistics on extracted entities from OpenIE results and saves the aggregated data in a
         JSON file. The function calculates the average character and word lengths of the extracted entities
@@ -976,14 +819,13 @@ class HippoRAG:
         It ensures that the graph structure is extended to include additional components,
         and logs the completion status along with printing the updated graph information.
         """
-
-        self.add_new_nodes()
-        self.add_new_edges()
-
-        logger.info(f"Graph construction completed!")
-        print(self.get_graph_info())
+        self.graph_manager.augment_graph(self.graph_builder)
 
     def add_new_nodes(self):
+        """Delegate to GraphBuilder."""
+        return self.graph_builder.add_new_nodes()
+    
+    def _add_new_nodes_legacy(self):
         """
         Adds new nodes to the graph from entity and passage embedding stores based on their attributes.
 
@@ -1014,6 +856,10 @@ class HippoRAG:
             self.graph.add_vertices(n=len(next(iter(new_nodes.values()))), attributes=new_nodes)
 
     def add_new_edges(self):
+        """Delegate to GraphBuilder."""
+        return self.graph_builder.add_new_edges()
+    
+    def _add_new_edges_legacy(self):
         """
         Processes edges from `node_to_node_stats` to add them into a graph object while
         managing adjacency lists, validating edges, and logging invalid edge cases.
@@ -1050,13 +896,14 @@ class HippoRAG:
         )
 
     def save_igraph(self):
-        logger.info(
-            f"Writing graph with {len(self.graph.vs())} nodes, {len(self.graph.es())} edges"
-        )
-        self.graph.write_pickle(self._graph_pickle_filename)
-        logger.info(f"Saving graph completed!")
+        """Delegate to GraphManager."""
+        return self.graph_manager.save_igraph()
 
     def get_graph_info(self) -> Dict:
+        """Delegate to GraphManager."""
+        return self.graph_manager.get_graph_info()
+    
+    def _get_graph_info_legacy(self) -> Dict:
         """
         Obtains detailed information about the graph such as the number of nodes,
         triples, and their classifications.
@@ -1112,6 +959,34 @@ class HippoRAG:
         return graph_info
 
     def prepare_retrieval_objects(self):
+        """Delegate to Retriever."""
+        self.retriever.prepare_retrieval_objects()
+        self._sync_timing_stats()
+        # Sync attributes for backward compatibility
+        if hasattr(self.retriever, 'query_to_embedding'):
+            self.query_to_embedding = self.retriever.query_to_embedding
+        if hasattr(self.retriever, 'entity_node_keys'):
+            self.entity_node_keys = self.retriever.entity_node_keys
+        if hasattr(self.retriever, 'passage_node_keys'):
+            self.passage_node_keys = self.retriever.passage_node_keys
+        if hasattr(self.retriever, 'fact_node_keys'):
+            self.fact_node_keys = self.retriever.fact_node_keys
+        if hasattr(self.retriever, 'entity_embeddings'):
+            self.entity_embeddings = self.retriever.entity_embeddings
+        if hasattr(self.retriever, 'passage_embeddings'):
+            self.passage_embeddings = self.retriever.passage_embeddings
+        if hasattr(self.retriever, 'fact_embeddings'):
+            self.fact_embeddings = self.retriever.fact_embeddings
+        if hasattr(self.retriever, 'node_name_to_vertex_idx'):
+            self.node_name_to_vertex_idx = self.retriever.node_name_to_vertex_idx
+        if hasattr(self.retriever, 'entity_node_idxs'):
+            self.entity_node_idxs = self.retriever.entity_node_idxs
+        if hasattr(self.retriever, 'passage_node_idxs'):
+            self.passage_node_idxs = self.retriever.passage_node_idxs
+        if hasattr(self.retriever, 'proc_triples_to_docs'):
+            self.proc_triples_to_docs = self.retriever.proc_triples_to_docs
+    
+    def _prepare_retrieval_objects_legacy(self):
         """
         Prepares various in-memory objects and attributes necessary for fast retrieval processes, such as embedding data and graph relationships, ensuring consistency
         and alignment with the underlying graph structure.
@@ -1517,7 +1392,14 @@ class HippoRAG:
             # Get the actual fact IDs
             real_candidate_fact_ids = [self.fact_node_keys[idx] for idx in candidate_fact_indices]
             fact_row_dict = self.fact_embedding_store.get_rows(real_candidate_fact_ids)
-            candidate_facts = [eval(fact_row_dict[id]['content']) for id in real_candidate_fact_ids]
+            candidate_facts = []
+            for id in real_candidate_fact_ids:
+                try:
+                    candidate_facts.append(json.loads(fact_row_dict[id]['content']))
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse fact content for id {id}: {e}")
+                    # Skip invalid facts
+                    continue
             
             # Rerank the facts
             top_k_fact_indices, top_k_facts, reranker_dict = self.rerank_filter(query,
