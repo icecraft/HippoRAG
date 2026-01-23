@@ -142,6 +142,65 @@ class BaseConfig:
         metadata={"help": "Data type for local embedding model."}
     )
     
+    # pgvector specific attributes
+    use_pgvector: bool = field(
+        default=False,
+        metadata={"help": "Whether to use pgvector for embedding storage instead of Parquet files."}
+    )
+    pgvector_host: str = field(
+        default="localhost",
+        metadata={"help": "PostgreSQL host for pgvector storage."}
+    )
+    pgvector_port: int = field(
+        default=5432,
+        metadata={"help": "PostgreSQL port for pgvector storage."}
+    )
+    pgvector_database: str = field(
+        default="hipporag",
+        metadata={"help": "PostgreSQL database name for pgvector storage."}
+    )
+    pgvector_user: str = field(
+        default="postgres",
+        metadata={"help": "PostgreSQL user for pgvector storage."}
+    )
+    pgvector_password: str = field(
+        default="",
+        metadata={"help": "PostgreSQL password for pgvector storage."}
+    )
+    pgvector_index_type: Literal["ivfflat", "hnsw"] = field(
+        default="ivfflat",
+        metadata={"help": "Type of vector index to use: 'ivfflat' (memory-efficient) or 'hnsw' (faster)."}
+    )
+    pgvector_index_lists: int = field(
+        default=100,
+        metadata={"help": "Number of lists for IVFFlat index (only used when pgvector_index_type='ivfflat')."}
+    )
+    
+    # Nebula Graph specific attributes
+    use_nebula_graph: bool = field(
+        default=False,
+        metadata={"help": "Whether to use Nebula Graph for graph storage instead of pickle files."}
+    )
+    nebula_host: str = field(
+        default="127.0.0.1",
+        metadata={"help": "Nebula Graph graphd host address."}
+    )
+    nebula_port: int = field(
+        default=9669,
+        metadata={"help": "Nebula Graph graphd port."}
+    )
+    nebula_user: str = field(
+        default="root",
+        metadata={"help": "Nebula Graph user name."}
+    )
+    nebula_password: str = field(
+        default="nebula",
+        metadata={"help": "Nebula Graph password."}
+    )
+    nebula_space_name: str = field(
+        default="hipporag",
+        metadata={"help": "Nebula Graph space name for storing the knowledge graph."}
+    )
     
     
     # Graph construction specific attributes

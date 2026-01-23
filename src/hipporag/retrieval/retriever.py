@@ -277,6 +277,37 @@ class Retriever:
             query_embedding = self.embedding_model.batch_encode(query,
                                                                 instruction=get_query_instruction('query_to_passage'),
                                                                 norm=True)
+        
+        # If using pgvector and the store supports similarity_search, use it for better performance
+        if hasattr(self.chunk_embedding_store, 'similarity_search'):
+            try:
+                top_k = self.global_config.retrieval_top_k
+                results = self.chunk_embedding_store.similarity_search(
+                    query_embedding, 
+                    top_k=top_k
+                )
+                
+                # Convert to original format (indices into passage_node_keys)
+                sorted_doc_ids = []
+                sorted_doc_scores = []
+                for hash_id, content, score in results:
+                    if hash_id in self.passage_node_keys:
+                        idx = self.passage_node_keys.index(hash_id)
+                        sorted_doc_ids.append(idx)
+                        sorted_doc_scores.append(score)
+                
+                if len(sorted_doc_ids) > 0:
+                    return np.array(sorted_doc_ids), np.array(sorted_doc_scores)
+                else:
+                    logger.warning("No matching passages found in similarity search, falling back to standard method")
+            except Exception as e:
+                logger.warning(f"Error using pgvector similarity search, falling back to standard method: {e}")
+        
+        # Standard method: use in-memory embeddings
+        if len(self.passage_embeddings) == 0 or len(self.passage_node_keys) == 0:
+            logger.warning("No passages available for retrieval. Returning empty results.")
+            return np.array([], dtype=np.int64), np.array([])
+        
         query_doc_scores = np.dot(self.passage_embeddings, query_embedding.T)
         query_doc_scores = np.squeeze(query_doc_scores) if query_doc_scores.ndim == 2 else query_doc_scores
         query_doc_scores = min_max_normalize(query_doc_scores)

@@ -12,7 +12,7 @@ import time
 
 from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
-from .embedding_store import EmbeddingStore
+from .embedding_store import create_embedding_store
 from .information_extraction import OpenIE
 from .evaluation.retrieval_eval import RetrievalRecall
 from .evaluation.qa_eval import QAExactMatch, QAF1Score
@@ -26,7 +26,7 @@ from .utils.typing import Triple
 from .utils.config_utils import BaseConfig
 
 # Import new modular components
-from .graph import GraphManager, GraphBuilder
+from .graph import GraphManager, GraphBuilder, create_graph_manager
 from .retrieval import Retriever
 from .indexing import Indexer
 from .qa import QAEngine
@@ -131,6 +131,7 @@ class HippoRAG:
         self.ent_node_to_chunk_ids = {}
         
         # Initialize graph (temporary GraphManager for initialization)
+        # Use base GraphManager for initialization since we don't have stores yet
         temp_graph_manager = GraphManager(
             global_config=self.global_config,
             working_dir=self.working_dir,
@@ -145,15 +146,16 @@ class HippoRAG:
         self.embedding_model: BaseEmbeddingModel = _get_embedding_model_class(
             embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
                                                                           embedding_model_name=self.global_config.embedding_model_name)
-        self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
-                                                    os.path.join(self.working_dir, "chunk_embeddings"),
-                                                    self.global_config.embedding_batch_size, 'chunk')
-        self.entity_embedding_store = EmbeddingStore(self.embedding_model,
-                                                     os.path.join(self.working_dir, "entity_embeddings"),
-                                                     self.global_config.embedding_batch_size, 'entity')
-        self.fact_embedding_store = EmbeddingStore(self.embedding_model,
-                                                   os.path.join(self.working_dir, "fact_embeddings"),
-                                                   self.global_config.embedding_batch_size, 'fact')
+        # Use factory function to create embedding stores (supports both Parquet and pgvector)
+        self.chunk_embedding_store = create_embedding_store(
+            self.embedding_model, self.global_config, 'chunk'
+        )
+        self.entity_embedding_store = create_embedding_store(
+            self.embedding_model, self.global_config, 'entity'
+        )
+        self.fact_embedding_store = create_embedding_store(
+            self.embedding_model, self.global_config, 'fact'
+        )
 
         self.prompt_template_manager = PromptTemplateManager(role_mapping={"system": "system", "user": "user", "assistant": "assistant"})
 
@@ -162,7 +164,8 @@ class HippoRAG:
         self.rerank_filter = DSPyFilter(self)
 
         # Initialize modular components
-        self.graph_manager = GraphManager(
+        # Use factory function to create appropriate graph manager (supports both pickle and Nebula Graph)
+        self.graph_manager = create_graph_manager(
             global_config=self.global_config,
             working_dir=self.working_dir,
             graph=self.graph,

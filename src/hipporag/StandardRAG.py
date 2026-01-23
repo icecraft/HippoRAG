@@ -72,9 +72,11 @@ class StandardRAG:
             embedding_model_name=self.global_config.embedding_model_name)(global_config=self.global_config,
                                                                           embedding_model_name=self.global_config.embedding_model_name)
 
-        self.chunk_embedding_store = EmbeddingStore(self.embedding_model,
-                                                    os.path.join(self.working_dir, "chunk_embeddings"),
-                                                    self.global_config.embedding_batch_size, 'chunk')
+        # Use factory function to create embedding store (supports both Parquet and pgvector)
+        from .embedding_store import create_embedding_store
+        self.chunk_embedding_store = create_embedding_store(
+            self.embedding_model, self.global_config, 'chunk'
+        )
 
         self.prompt_template_manager = PromptTemplateManager(role_mapping={"system": "system", "user": "user", "assistant": "assistant"})
 

@@ -14,3 +14,5 @@ filelock
 python-dotenv
 pyarrow
 fastparquet
+psycopg2-binary>=2.9.0
+nebula3-python>=3.0.0

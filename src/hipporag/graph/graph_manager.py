@@ -149,3 +149,48 @@ class GraphManager:
         logger.info(f"Graph construction completed!")
         print(self.get_graph_info())
 
+
+def create_graph_manager(global_config: BaseConfig,
+                        working_dir: str,
+                        graph: ig.Graph,
+                        entity_embedding_store: EmbeddingStore,
+                        chunk_embedding_store: EmbeddingStore,
+                        fact_embedding_store: EmbeddingStore,
+                        node_to_node_stats: Dict) -> GraphManager:
+    """
+    Factory function to create appropriate graph manager based on config.
+    
+    Parameters:
+        global_config: BaseConfig instance
+        working_dir: Working directory path
+        graph: The igraph graph object
+        entity_embedding_store: Entity embedding store
+        chunk_embedding_store: Chunk embedding store
+        fact_embedding_store: Fact embedding store
+        node_to_node_stats: Dictionary mapping node pairs to statistics
+    
+    Returns:
+        GraphManager or NebulaGraphManager instance
+    """
+    if global_config.use_nebula_graph:
+        from .graph_manager_nebula import NebulaGraphManager
+        return NebulaGraphManager(
+            global_config=global_config,
+            working_dir=working_dir,
+            graph=graph,
+            entity_embedding_store=entity_embedding_store,
+            chunk_embedding_store=chunk_embedding_store,
+            fact_embedding_store=fact_embedding_store,
+            node_to_node_stats=node_to_node_stats
+        )
+    else:
+        return GraphManager(
+            global_config=global_config,
+            working_dir=working_dir,
+            graph=graph,
+            entity_embedding_store=entity_embedding_store,
+            chunk_embedding_store=chunk_embedding_store,
+            fact_embedding_store=fact_embedding_store,
+            node_to_node_stats=node_to_node_stats
+        )
+
