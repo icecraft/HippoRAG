@@ -94,8 +94,19 @@ class NebulaGraphManager:
                 """
                 result = session.execute(create_space_query)
                 if result.error_code != ttypes.ErrorCode.SUCCEEDED:
-                    if "existed" not in result.error_msg:
-                        logger.warning(f"Space creation result: {result.error_msg}")
+                    try:
+                        if callable(result.error_msg):
+                            error_msg = result.error_msg()
+                            if isinstance(error_msg, bytes):
+                                error_msg = error_msg.decode('utf-8', errors='replace')
+                            else:
+                                error_msg = str(error_msg)
+                        else:
+                            error_msg = str(result.error_msg)
+                    except (UnicodeDecodeError, AttributeError) as decode_err:
+                        error_msg = f"Error message decode failed: {decode_err}"
+                    if "existed" not in error_msg:
+                        logger.warning(f"Space creation result: {error_msg}")
                 
                 # Use the space
                 session.execute(f"USE {self.space_name};")
@@ -110,8 +121,19 @@ class NebulaGraphManager:
                 """
                 result = session.execute(create_tag_query)
                 if result.error_code != ttypes.ErrorCode.SUCCEEDED:
-                    if "existed" not in result.error_msg:
-                        logger.warning(f"Tag creation result: {result.error_msg}")
+                    try:
+                        if callable(result.error_msg):
+                            error_msg = result.error_msg()
+                            if isinstance(error_msg, bytes):
+                                error_msg = error_msg.decode('utf-8', errors='replace')
+                            else:
+                                error_msg = str(error_msg)
+                        else:
+                            error_msg = str(result.error_msg)
+                    except (UnicodeDecodeError, AttributeError) as decode_err:
+                        error_msg = f"Error message decode failed: {decode_err}"
+                    if "existed" not in error_msg:
+                        logger.warning(f"Tag creation result: {error_msg}")
                 
                 # Create Edge Type for relations
                 create_edge_query = """
@@ -122,8 +144,19 @@ class NebulaGraphManager:
                 """
                 result = session.execute(create_edge_query)
                 if result.error_code != ttypes.ErrorCode.SUCCEEDED:
-                    if "existed" not in result.error_msg:
-                        logger.warning(f"Edge creation result: {result.error_msg}")
+                    try:
+                        if callable(result.error_msg):
+                            error_msg = result.error_msg()
+                            if isinstance(error_msg, bytes):
+                                error_msg = error_msg.decode('utf-8', errors='replace')
+                            else:
+                                error_msg = str(error_msg)
+                        else:
+                            error_msg = str(result.error_msg)
+                    except (UnicodeDecodeError, AttributeError) as decode_err:
+                        error_msg = f"Error message decode failed: {decode_err}"
+                    if "existed" not in error_msg:
+                        logger.warning(f"Edge creation result: {error_msg}")
                 
                 # Create indexes for better query performance
                 try:
@@ -173,7 +206,18 @@ class NebulaGraphManager:
                 result = session.execute(fetch_nodes_query)
                 
                 if result.error_code != ttypes.ErrorCode.SUCCEEDED:
-                    logger.error(f"Error fetching nodes: {result.error_msg}")
+                    try:
+                        if callable(result.error_msg):
+                            error_msg = result.error_msg()
+                            if isinstance(error_msg, bytes):
+                                error_msg = error_msg.decode('utf-8', errors='replace')
+                            else:
+                                error_msg = str(error_msg)
+                        else:
+                            error_msg = str(result.error_msg)
+                    except (UnicodeDecodeError, AttributeError) as decode_err:
+                        error_msg = f"Error message decode failed: {decode_err}"
+                    logger.error(f"Error fetching nodes: {error_msg}")
                     return None
                 
                 # Create igraph
@@ -214,7 +258,18 @@ class NebulaGraphManager:
                 result = session.execute(fetch_edges_query)
                 
                 if result.error_code != ttypes.ErrorCode.SUCCEEDED:
-                    logger.warning(f"Error fetching edges: {result.error_msg}")
+                    try:
+                        if callable(result.error_msg):
+                            error_msg = result.error_msg()
+                            if isinstance(error_msg, bytes):
+                                error_msg = error_msg.decode('utf-8', errors='replace')
+                            else:
+                                error_msg = str(error_msg)
+                        else:
+                            error_msg = str(result.error_msg)
+                    except (UnicodeDecodeError, AttributeError) as decode_err:
+                        error_msg = f"Error message decode failed: {decode_err}"
+                    logger.warning(f"Error fetching edges: {error_msg}")
                     return graph
                 
                 # Add edges
@@ -329,9 +384,25 @@ class NebulaGraphManager:
                             
                             result = session.execute(query)
                             if result.error_code != ttypes.ErrorCode.SUCCEEDED:
-                                logger.warning(f"Error inserting node {node_name}: {result.error_msg}")
+                                try:
+                                    if callable(result.error_msg):
+                                        error_msg = result.error_msg()
+                                        # Handle potential UnicodeDecodeError
+                                        if isinstance(error_msg, bytes):
+                                            error_msg = error_msg.decode('utf-8', errors='replace')
+                                        else:
+                                            error_msg = str(error_msg)
+                                    else:
+                                        error_msg = str(result.error_msg)
+                                except (UnicodeDecodeError, AttributeError) as decode_err:
+                                    error_msg = f"Error message decode failed: {decode_err}"
+                                logger.warning(f"Error inserting node {node_name}: {error_msg}")
                         except Exception as e:
-                            logger.warning(f"Error processing node {node.get('name', 'unknown')}: {e}")
+                            try:
+                                node_name_for_log = node["name"] if "name" in node.attributes() else "unknown"
+                            except:
+                                node_name_for_log = "unknown"
+                            logger.warning(f"Error processing node {node_name_for_log}: {e}")
                             continue
                 
                 # Insert edges in batches
@@ -357,8 +428,20 @@ class NebulaGraphManager:
                             result = session.execute(query)
                             if result.error_code != ttypes.ErrorCode.SUCCEEDED:
                                 # Skip if edge already exists
-                                if "existed" not in result.error_msg.lower():
-                                    logger.warning(f"Error inserting edge {src_name} -> {dst_name}: {result.error_msg}")
+                                try:
+                                    if callable(result.error_msg):
+                                        error_msg = result.error_msg()
+                                        # Handle potential UnicodeDecodeError
+                                        if isinstance(error_msg, bytes):
+                                            error_msg = error_msg.decode('utf-8', errors='replace')
+                                        else:
+                                            error_msg = str(error_msg)
+                                    else:
+                                        error_msg = str(result.error_msg)
+                                except (UnicodeDecodeError, AttributeError) as decode_err:
+                                    error_msg = f"Error message decode failed: {decode_err}"
+                                if "existed" not in error_msg.lower():
+                                    logger.warning(f"Error inserting edge {src_name} -> {dst_name}: {error_msg}")
                         except Exception as e:
                             logger.warning(f"Error processing edge: {e}")
                             continue

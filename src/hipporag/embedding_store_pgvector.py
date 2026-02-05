@@ -5,6 +5,7 @@ from copy import deepcopy
 import psycopg2
 from psycopg2.extras import execute_values
 from psycopg2 import sql
+import ast
 
 from .utils.misc_utils import compute_mdhash_id
 
@@ -18,7 +19,7 @@ class PgVectorEmbeddingStore:
     """
     
     def __init__(self, embedding_model, db_config: Dict, batch_size: int, namespace: str,
-                 index_type: str = "ivfflat", index_lists: int = 100):
+                 index_type: str = "ivfflat", index_lists: int = 100, force_index_from_scratch: bool = False):
         """
         Parameters:
             embedding_model: The embedding model
@@ -38,6 +39,7 @@ class PgVectorEmbeddingStore:
         self.namespace = namespace
         self.index_type = index_type
         self.index_lists = index_lists
+        self.force_index_from_scratch = force_index_from_scratch
         self.table_name = f"embeddings_{namespace}"
         
         # Get embedding dimension
@@ -58,12 +60,38 @@ class PgVectorEmbeddingStore:
                 logger.warning(f"Could not determine embedding_dim from model '{model_name}', defaulting to 1536")
                 self.embedding_dim = 1536
         
+        # Try to get actual embedding dimension by encoding a test string
+        # This must happen BEFORE connecting to database and creating table
+        try:
+            test_embedding = embedding_model.batch_encode(["test"])
+            if isinstance(test_embedding, np.ndarray):
+                if test_embedding.ndim > 1:
+                    actual_dim = test_embedding.shape[-1]
+                elif test_embedding.ndim == 1:
+                    actual_dim = test_embedding.shape[0]
+                else:
+                    actual_dim = len(test_embedding) if hasattr(test_embedding, '__len__') else 1
+                
+                if actual_dim != self.embedding_dim:
+                    logger.warning(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {actual_dim}. Using actual dimension {actual_dim}.")
+                    self.embedding_dim = actual_dim
+        except Exception as e:
+            logger.warning(f"Could not determine actual embedding dimension from test encoding: {e}. Using inferred dimension {self.embedding_dim}.")
+        
         # Connect to PostgreSQL
         try:
             self.conn = psycopg2.connect(**db_config)
             self.conn.autocommit = False
+            
+            # Drop table if force_index_from_scratch
+            if force_index_from_scratch:
+                with self.conn.cursor() as cur:
+                    cur.execute(f"DROP TABLE IF EXISTS {self.table_name} CASCADE;")
+                    self.conn.commit()
+                    logger.info(f"Dropped existing table {self.table_name} (force_index_from_scratch=True)")
+            
             self._init_table()
-            logger.info(f"Connected to PostgreSQL and initialized table {self.table_name}")
+            logger.info(f"Connected to PostgreSQL and initialized table {self.table_name} with dimension {self.embedding_dim}")
         except Exception as e:
             logger.error(f"Failed to connect to PostgreSQL: {e}")
             raise
@@ -120,6 +148,37 @@ class PgVectorEmbeddingStore:
             except Exception as e:
                 logger.warning(f"Could not create index (may already exist or need data first): {e}")
                 self.conn.rollback()
+    
+    def _update_table_dimension(self, new_dim: int):
+        """Update table to use new embedding dimension. Only works if table is empty."""
+        with self.conn.cursor() as cur:
+            # Check if table has data
+            cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+            count = cur.fetchone()[0]
+            
+            if count > 0:
+                raise ValueError(
+                    f"Cannot update table dimension from {self.embedding_dim} to {new_dim}: "
+                    f"table {self.table_name} already contains {count} records. "
+                    f"Please drop the table manually or use force_index_from_scratch=True."
+                )
+            
+            # Drop and recreate table with new dimension
+            logger.info(f"Recreating table {self.table_name} with dimension {new_dim}")
+            cur.execute(f"DROP TABLE IF EXISTS {self.table_name} CASCADE;")
+            self.conn.commit()
+            
+            # Recreate table with new dimension
+            cur.execute(f"""
+                CREATE TABLE {self.table_name} (
+                    hash_id TEXT PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    embedding vector({new_dim}),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            self.conn.commit()
+            logger.info(f"Table {self.table_name} recreated with dimension {new_dim}")
     
     def _ensure_index(self):
         """Ensure index exists after data is inserted."""
@@ -194,6 +253,35 @@ class PgVectorEmbeddingStore:
         if not isinstance(embeddings, np.ndarray):
             embeddings = np.array(embeddings)
         
+        # Check actual embedding dimension and update if needed
+        if embeddings.size > 0:
+            # Get actual dimension from first embedding
+            if embeddings.ndim > 1:
+                actual_dim = embeddings.shape[-1]
+            elif len(embeddings) > 0:
+                actual_dim = len(embeddings[0]) if hasattr(embeddings[0], '__len__') else 1
+            else:
+                actual_dim = embeddings.shape[0] if embeddings.ndim > 0 else 1
+            
+            if actual_dim != self.embedding_dim:
+                # Check if table is empty
+                with self.conn.cursor() as cur:
+                    cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+                    count = cur.fetchone()[0]
+                
+                if count == 0:
+                    # Table is empty, safe to update
+                    logger.warning(f"Embedding dimension mismatch: table expects {self.embedding_dim}, but got {actual_dim}. Updating table structure...")
+                    self._update_table_dimension(actual_dim)
+                    self.embedding_dim = actual_dim
+                else:
+                    # Table has data, check if existing data matches
+                    raise ValueError(
+                        f"Embedding dimension mismatch: table {self.table_name} expects {self.embedding_dim} dimensions, "
+                        f"but embedding model produces {actual_dim} dimensions. Table already contains {count} records. "
+                        f"Please use force_index_from_scratch=True to rebuild."
+                    )
+        
         # Insert into database
         try:
             with self.conn.cursor() as cur:
@@ -221,6 +309,28 @@ class PgVectorEmbeddingStore:
             self.conn.rollback()
             raise
     
+    def _parse_vector(self, vector_value) -> np.ndarray:
+        """Parse pgvector vector value to numpy array."""
+        if isinstance(vector_value, np.ndarray):
+            return vector_value
+        elif isinstance(vector_value, (list, tuple)):
+            return np.array(vector_value, dtype=np.float32)
+        elif isinstance(vector_value, str):
+            # pgvector returns vector as string like '[0.1,0.2,0.3]'
+            try:
+                # Try to parse as Python literal
+                parsed = ast.literal_eval(vector_value)
+                return np.array(parsed, dtype=np.float32)
+            except (ValueError, SyntaxError):
+                # If that fails, try to parse manually
+                # Remove brackets and split by comma
+                cleaned = vector_value.strip('[]')
+                values = [float(x.strip()) for x in cleaned.split(',')]
+                return np.array(values, dtype=np.float32)
+        else:
+            # Try direct conversion
+            return np.array(vector_value, dtype=np.float32)
+    
     def get_embedding(self, hash_id: str, dtype=np.float32) -> np.ndarray:
         """Get a single embedding by hash_id."""
         with self.conn.cursor() as cur:
@@ -230,7 +340,8 @@ class PgVectorEmbeddingStore:
             )
             result = cur.fetchone()
             if result:
-                return np.array(result[0], dtype=dtype)
+                vector = self._parse_vector(result[0])
+                return vector.astype(dtype) if dtype != np.float32 else vector
             return None
     
     def get_embeddings(self, hash_ids: List[str], dtype=np.float32) -> List[np.ndarray]:
@@ -244,7 +355,12 @@ class PgVectorEmbeddingStore:
                 f"SELECT hash_id, embedding FROM {self.table_name} WHERE hash_id IN ({placeholders})",
                 hash_ids
             )
-            results = {row[0]: np.array(row[1], dtype=dtype) for row in cur.fetchall()}
+            results = {}
+            for row in cur.fetchall():
+                vector = self._parse_vector(row[1])
+                if dtype != np.float32:
+                    vector = vector.astype(dtype)
+                results[row[0]] = vector
         
         # Return in the same order as hash_ids, None for missing ones
         return [results.get(hid) for hid in hash_ids]

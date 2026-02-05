@@ -90,6 +90,12 @@ class Indexer:
             self.openie_manager.save_openie_results(all_openie_info)
 
         ner_results_dict, triple_results_dict = reformat_openie_results(all_openie_info)
+        
+        # Filter to only include chunks that exist in chunk_to_rows
+        # This handles cases where OpenIE results exist for chunks that are no longer in the database
+        chunk_ids_in_store = set(chunk_to_rows.keys())
+        ner_results_dict = {k: v for k, v in ner_results_dict.items() if k in chunk_ids_in_store}
+        triple_results_dict = {k: v for k, v in triple_results_dict.items() if k in chunk_ids_in_store}
 
         assert len(chunk_to_rows) == len(ner_results_dict) == len(triple_results_dict), \
             f"len(chunk_to_rows): {len(chunk_to_rows)}, len(ner_results_dict): {len(ner_results_dict)}, len(triple_results_dict): {len(triple_results_dict)}"

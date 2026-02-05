@@ -206,7 +206,8 @@ def create_embedding_store(embedding_model, config, namespace: str):
             batch_size=config.embedding_batch_size,
             namespace=namespace,
             index_type=config.pgvector_index_type,
-            index_lists=config.pgvector_index_lists
+            index_lists=config.pgvector_index_lists,
+            force_index_from_scratch=config.force_index_from_scratch
         )
     else:
         # Calculate working directory path
