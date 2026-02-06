@@ -49,7 +49,23 @@ class MultiBookHippoRAG:
         >>> results = manager.query("What happened?", book_ids=["book1", "book2"])
     """
     
-    def __init__(self, base_config: BaseConfig, base_save_dir: Optional[str] = None):
+    def __init__(self, 
+                 base_config: BaseConfig, 
+                 base_save_dir: Optional[str] = None,
+                 # pgvector configuration (optional overrides)
+                 pgvector_host: Optional[str] = None,
+                 pgvector_port: Optional[int] = None,
+                 pgvector_database: Optional[str] = None,
+                 pgvector_user: Optional[str] = None,
+                 pgvector_password: Optional[str] = None,
+                 pgvector_index_type: Optional[str] = None,
+                 pgvector_index_lists: Optional[int] = None,
+                 # Nebula Graph configuration (optional overrides)
+                 nebula_host: Optional[str] = None,
+                 nebula_port: Optional[int] = None,
+                 nebula_user: Optional[str] = None,
+                 nebula_password: Optional[str] = None,
+                 nebula_space_name: Optional[str] = None):
         """
         Initialize the multi-book manager.
         
@@ -60,11 +76,55 @@ class MultiBookHippoRAG:
             base_save_dir: str, optional
                 Base directory for saving book indices. If None, uses base_config.save_dir.
                 Each book will be saved in a subdirectory: {base_save_dir}/{book_id}
+            pgvector_host: str, optional
+                PostgreSQL host (overrides base_config if provided)
+            pgvector_port: int, optional
+                PostgreSQL port (overrides base_config if provided)
+            pgvector_database: str, optional
+                PostgreSQL database name (overrides base_config if provided)
+            pgvector_user: str, optional
+                PostgreSQL user (overrides base_config if provided)
+            pgvector_password: str, optional
+                PostgreSQL password (overrides base_config if provided)
+            pgvector_index_type: str, optional
+                Vector index type (overrides base_config if provided)
+            pgvector_index_lists: int, optional
+                Number of lists for IVFFlat index (overrides base_config if provided)
+            nebula_host: str, optional
+                Nebula Graph host (overrides base_config if provided)
+            nebula_port: int, optional
+                Nebula Graph port (overrides base_config if provided)
+            nebula_user: str, optional
+                Nebula Graph user (overrides base_config if provided)
+            nebula_password: str, optional
+                Nebula Graph password (overrides base_config if provided)
+            nebula_space_name: str, optional
+                Nebula Graph space name (overrides base_config if provided)
         """
         self.base_config = base_config
         self.base_save_dir = base_save_dir or base_config.save_dir
         self.books: Dict[str, HippoRAG] = {}
         self.book_metadata: Dict[str, Dict[str, Any]] = {}
+        
+        # Store pgvector overrides
+        self.pgvector_overrides = {
+            'host': pgvector_host,
+            'port': pgvector_port,
+            'database': pgvector_database,
+            'user': pgvector_user,
+            'password': pgvector_password,
+            'index_type': pgvector_index_type,
+            'index_lists': pgvector_index_lists
+        }
+        
+        # Store Nebula Graph overrides
+        self.nebula_overrides = {
+            'host': nebula_host,
+            'port': nebula_port,
+            'user': nebula_user,
+            'password': nebula_password,
+            'space_name': nebula_space_name
+        }
         
         # Ensure base directory exists
         if not os.path.exists(self.base_save_dir):
@@ -109,6 +169,36 @@ class MultiBookHippoRAG:
         book_config.force_index_from_scratch = force_index_from_scratch
         book_config.force_openie_from_scratch = force_openie_from_scratch
         book_config.corpus_len = len(chapters)
+        
+        # Apply pgvector overrides if provided
+        if self.pgvector_overrides['host'] is not None:
+            book_config.pgvector_host = self.pgvector_overrides['host']
+        if self.pgvector_overrides['port'] is not None:
+            book_config.pgvector_port = self.pgvector_overrides['port']
+        if self.pgvector_overrides['database'] is not None:
+            book_config.pgvector_database = self.pgvector_overrides['database']
+        if self.pgvector_overrides['user'] is not None:
+            book_config.pgvector_user = self.pgvector_overrides['user']
+        if self.pgvector_overrides['password'] is not None:
+            book_config.pgvector_password = self.pgvector_overrides['password']
+        if self.pgvector_overrides['index_type'] is not None:
+            book_config.pgvector_index_type = self.pgvector_overrides['index_type']
+        if self.pgvector_overrides['index_lists'] is not None:
+            book_config.pgvector_index_lists = self.pgvector_overrides['index_lists']
+        
+        # Apply Nebula Graph overrides if provided
+        if self.nebula_overrides['host'] is not None:
+            book_config.nebula_host = self.nebula_overrides['host']
+        if self.nebula_overrides['port'] is not None:
+            book_config.nebula_port = self.nebula_overrides['port']
+        if self.nebula_overrides['user'] is not None:
+            book_config.nebula_user = self.nebula_overrides['user']
+        if self.nebula_overrides['password'] is not None:
+            book_config.nebula_password = self.nebula_overrides['password']
+        if self.nebula_overrides['space_name'] is not None:
+            # For multi-book, use book_id as suffix to space name for isolation
+            base_space = self.nebula_overrides['space_name']
+            book_config.nebula_space_name = f"{base_space}_{book_id}"
         
         # Create HippoRAG instance for this book
         hipporag = HippoRAG(global_config=book_config)
@@ -415,6 +505,36 @@ class MultiBookHippoRAG:
         book_config.save_dir = book_dir
         book_config.force_index_from_scratch = False
         book_config.force_openie_from_scratch = False
+        
+        # Apply pgvector overrides if provided
+        if self.pgvector_overrides['host'] is not None:
+            book_config.pgvector_host = self.pgvector_overrides['host']
+        if self.pgvector_overrides['port'] is not None:
+            book_config.pgvector_port = self.pgvector_overrides['port']
+        if self.pgvector_overrides['database'] is not None:
+            book_config.pgvector_database = self.pgvector_overrides['database']
+        if self.pgvector_overrides['user'] is not None:
+            book_config.pgvector_user = self.pgvector_overrides['user']
+        if self.pgvector_overrides['password'] is not None:
+            book_config.pgvector_password = self.pgvector_overrides['password']
+        if self.pgvector_overrides['index_type'] is not None:
+            book_config.pgvector_index_type = self.pgvector_overrides['index_type']
+        if self.pgvector_overrides['index_lists'] is not None:
+            book_config.pgvector_index_lists = self.pgvector_overrides['index_lists']
+        
+        # Apply Nebula Graph overrides if provided
+        if self.nebula_overrides['host'] is not None:
+            book_config.nebula_host = self.nebula_overrides['host']
+        if self.nebula_overrides['port'] is not None:
+            book_config.nebula_port = self.nebula_overrides['port']
+        if self.nebula_overrides['user'] is not None:
+            book_config.nebula_user = self.nebula_overrides['user']
+        if self.nebula_overrides['password'] is not None:
+            book_config.nebula_password = self.nebula_overrides['password']
+        if self.nebula_overrides['space_name'] is not None:
+            # For multi-book, use book_id as suffix to space name for isolation
+            base_space = self.nebula_overrides['space_name']
+            book_config.nebula_space_name = f"{base_space}_{book_id}"
         
         # Load the HippoRAG instance
         hipporag = HippoRAG(global_config=book_config)
