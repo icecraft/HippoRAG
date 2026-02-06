@@ -43,9 +43,28 @@ class PgVectorEmbeddingStore:
         self.table_name = f"embeddings_{namespace}"
         
         # Get embedding dimension
-        # Try to get from embedding_model, or infer from model name
-        if hasattr(embedding_model, 'embedding_dim') and embedding_model.embedding_dim:
+        # First, try to get actual embedding dimension by encoding a test string
+        # This is the most reliable method and must happen BEFORE connecting to database
+        actual_dim_from_test = None
+        try:
+            test_embedding = embedding_model.batch_encode(["test"])
+            if isinstance(test_embedding, np.ndarray):
+                if test_embedding.ndim > 1:
+                    actual_dim_from_test = test_embedding.shape[-1]
+                elif test_embedding.ndim == 1:
+                    actual_dim_from_test = test_embedding.shape[0]
+                else:
+                    actual_dim_from_test = len(test_embedding) if hasattr(test_embedding, '__len__') else 1
+        except Exception as e:
+            logger.debug(f"Could not determine actual embedding dimension from test encoding: {e}")
+        
+        # Set embedding dimension (prefer actual test result, then model attribute, then model name inference)
+        if actual_dim_from_test is not None:
+            self.embedding_dim = actual_dim_from_test
+            logger.info(f"Determined embedding dimension {self.embedding_dim} from test encoding")
+        elif hasattr(embedding_model, 'embedding_dim') and embedding_model.embedding_dim:
             self.embedding_dim = embedding_model.embedding_dim
+            logger.info(f"Using embedding dimension {self.embedding_dim} from model attribute")
         else:
             # Try to infer from model name
             model_name = getattr(embedding_model, 'embedding_model_name', '')
@@ -55,28 +74,18 @@ class PgVectorEmbeddingStore:
                 self.embedding_dim = 1536
             elif 'text-embedding-ada-002' in model_name:
                 self.embedding_dim = 1536
+            elif 'text-embedding-v4' in model_name or 'text-embedding-4' in model_name:
+                self.embedding_dim = 1024
             else:
                 # Default to 1536 (most common)
                 logger.warning(f"Could not determine embedding_dim from model '{model_name}', defaulting to 1536")
                 self.embedding_dim = 1536
+            logger.info(f"Inferred embedding dimension {self.embedding_dim} from model name: {model_name}")
         
-        # Try to get actual embedding dimension by encoding a test string
-        # This must happen BEFORE connecting to database and creating table
-        try:
-            test_embedding = embedding_model.batch_encode(["test"])
-            if isinstance(test_embedding, np.ndarray):
-                if test_embedding.ndim > 1:
-                    actual_dim = test_embedding.shape[-1]
-                elif test_embedding.ndim == 1:
-                    actual_dim = test_embedding.shape[0]
-                else:
-                    actual_dim = len(test_embedding) if hasattr(test_embedding, '__len__') else 1
-                
-                if actual_dim != self.embedding_dim:
-                    logger.warning(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {actual_dim}. Using actual dimension {actual_dim}.")
-                    self.embedding_dim = actual_dim
-        except Exception as e:
-            logger.warning(f"Could not determine actual embedding dimension from test encoding: {e}. Using inferred dimension {self.embedding_dim}.")
+        # If we got actual dimension from test but it differs from inferred, use actual
+        if actual_dim_from_test is not None and actual_dim_from_test != self.embedding_dim:
+            logger.info(f"Using actual embedding dimension {actual_dim_from_test} (differs from inferred {self.embedding_dim})")
+            self.embedding_dim = actual_dim_from_test
         
         # Connect to PostgreSQL
         try:
