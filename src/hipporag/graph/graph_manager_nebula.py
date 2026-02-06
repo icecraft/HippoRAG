@@ -94,14 +94,14 @@ class NebulaGraphManager:
             self.failed_edges = None
             self.debug_output_dir = None
     
-    def _extract_error_context_chars(self, error_bytes: bytes, error_position: int, context_size: int = 5) -> Optional[str]:
+    def _extract_error_context_chars(self, error_bytes: bytes, error_position: int, context_size: int = 20) -> Optional[str]:
         """
         Extract printable characters around the error position for easier debugging.
         
         Args:
             error_bytes: The raw error bytes
             error_position: The position where the error occurred
-            context_size: Number of characters to extract before and after (default: 5)
+            context_size: Number of characters to extract before and after (default: 20)
         
         Returns:
             A string with context characters, or None if extraction fails
@@ -707,8 +707,11 @@ class NebulaGraphManager:
                                                         error_context = error_msg_raw[start:end].hex()
                                                         # Extract printable characters around error position
                                                         error_context_chars = self._extract_error_context_chars(
-                                                            error_msg_raw, error_position, context_size=5
+                                                            error_msg_raw, error_position, context_size=20
                                                         )
+                                                        # Print traceback for debugging
+                                                        logger.error(f"UnicodeDecodeError when decoding error message for node {node_name} (encoding={encoding}):")
+                                                        logger.error("Full traceback:\n%s", traceback.format_exc())
                                                     continue
                                             if error_msg is None:
                                                 # Fallback: use replace mode
@@ -730,8 +733,11 @@ class NebulaGraphManager:
                                             error_context = error_msg_raw[start:end].hex()
                                             # Extract printable characters around error position
                                             error_context_chars = self._extract_error_context_chars(
-                                                error_msg_raw, error_position, context_size=5
+                                                error_msg_raw, error_position, context_size=20
                                             )
+                                        # Print traceback for debugging
+                                        logger.error(f"UnicodeDecodeError when decoding error message for node {node_name}:")
+                                        logger.error("Full traceback:\n%s", traceback.format_exc())
                                     error_msg = f"Error message decode failed: {type(decode_err).__name__}: {decode_err}"
                                 
                                 if not error_msg:
@@ -825,8 +831,11 @@ class NebulaGraphManager:
                                                         error_context = error_msg_raw[start:end].hex()
                                                         # Extract printable characters around error position
                                                         error_context_chars = self._extract_error_context_chars(
-                                                            error_msg_raw, error_position, context_size=5
+                                                            error_msg_raw, error_position, context_size=20
                                                         )
+                                                        # Print traceback for debugging
+                                                        logger.error(f"UnicodeDecodeError when decoding error message for edge {src_name} -> {dst_name} (encoding={encoding}):")
+                                                        logger.error("Full traceback:\n%s", traceback.format_exc())
                                                     continue
                                             if error_msg is None:
                                                 # Fallback: use replace mode
@@ -848,8 +857,11 @@ class NebulaGraphManager:
                                             error_context = error_msg_raw[start:end].hex()
                                             # Extract printable characters around error position
                                             error_context_chars = self._extract_error_context_chars(
-                                                error_msg_raw, error_position, context_size=5
+                                                error_msg_raw, error_position, context_size=20
                                             )
+                                        # Print traceback for debugging
+                                        logger.error(f"UnicodeDecodeError when decoding error message for edge {src_name} -> {dst_name}:")
+                                        logger.error("Full traceback:\n%s", traceback.format_exc())
                                     error_msg = f"Error message decode failed: {type(decode_err).__name__}: {decode_err}"
                                 
                                 if not error_msg:
@@ -979,11 +991,11 @@ class NebulaGraphManager:
                             error_bytes = bytes.fromhex(node_data["error_bytes_hex"])
                             error_position = node_data.get("error_position")
                             
-                            # Extract context bytes (5 bytes before and after error position)
+                            # Extract context bytes (20 bytes before and after error position)
                             context_bytes = None
                             if error_position is not None:
-                                context_start = max(0, error_position - 5)
-                                context_end = min(len(error_bytes), error_position + 6)  # +6 to include the error byte and 5 after
+                                context_start = max(0, error_position - 20)
+                                context_end = min(len(error_bytes), error_position + 21)  # +21 to include the error byte and 20 after
                                 context_bytes = error_bytes[context_start:context_end]
                             
                             error_bytes_list.append(error_bytes)
@@ -1021,11 +1033,11 @@ class NebulaGraphManager:
                             error_bytes = bytes.fromhex(edge_data["error_bytes_hex"])
                             error_position = edge_data.get("error_position")
                             
-                            # Extract context bytes (5 bytes before and after error position)
+                            # Extract context bytes (20 bytes before and after error position)
                             context_bytes = None
                             if error_position is not None:
-                                context_start = max(0, error_position - 5)
-                                context_end = min(len(error_bytes), error_position + 6)  # +6 to include the error byte and 5 after
+                                context_start = max(0, error_position - 20)
+                                context_end = min(len(error_bytes), error_position + 21)  # +21 to include the error byte and 20 after
                                 context_bytes = error_bytes[context_start:context_end]
                             
                             error_bytes_list.append(error_bytes)
@@ -1095,7 +1107,7 @@ class NebulaGraphManager:
                         "space_name": self.space_name,
                         "timestamp": timestamp,
                         "binary_file": os.path.basename(error_bytes_file),
-                        "file_format": "Each entry: [full_error_bytes][0xFFFFFFFF separator][context_bytes (5 bytes before/after error position)]",
+                        "file_format": "Each entry: [full_error_bytes][0xFFFFFFFF separator][context_bytes (20 bytes before/after error position)]",
                         "error_bytes_index": index_for_json
                     }, f, ensure_ascii=False, indent=2)
                 

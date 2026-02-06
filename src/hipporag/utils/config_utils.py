@@ -202,6 +202,15 @@ class BaseConfig:
         metadata={"help": "Nebula Graph space name for storing the knowledge graph."}
     )
     
+    # Graph library selection
+    graph_library: Literal["igraph", "dgraph"] = field(
+        default="igraph",
+        metadata={"help": "Graph library to use: 'igraph' (default, in-memory) or 'dgraph' (distributed graph database)."}
+    )
+    dgraph_config: Optional[dict] = field(
+        default=None,
+        metadata={"help": "Configuration dictionary for dgraph connection (e.g., {'host': 'localhost', 'port': 9080})."}
+    )
     
     # Graph construction specific attributes
     synonymy_edge_topk: int = field(
