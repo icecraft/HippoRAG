@@ -29,6 +29,5 @@ setuptools.setup(
         "pyarrow", # No version specified
         "fastparquet", # No version specified
         "psycopg2-binary>=2.9.0", # For pgvector support
-        "nebula3-python>=3.0.0", # For Nebula Graph support
     ]
 )

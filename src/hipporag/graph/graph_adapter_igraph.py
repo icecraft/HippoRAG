@@ -96,17 +96,17 @@ class IGraphAdapter(GraphInterface):
         """Save the graph to a pickle file."""
         self._graph.write_pickle(filename)
     
-    @staticmethod
-    def load(filename: str, directed: bool = True) -> 'IGraphAdapter':
+    @classmethod
+    def load(cls, filename: str, directed: bool = True) -> 'IGraphAdapter':
         """Load a graph from a pickle file."""
         graph = ig.Graph.Read_Pickle(filename)
-        return IGraphAdapter(graph)
+        return cls(graph)
     
-    @staticmethod
-    def create(directed: bool = True) -> 'IGraphAdapter':
+    @classmethod
+    def create(cls, directed: bool = True) -> 'IGraphAdapter':
         """Create a new empty graph."""
         graph = ig.Graph(directed=directed)
-        return IGraphAdapter(graph)
+        return cls(graph)
     
     @property
     def native_graph(self) -> ig.Graph:

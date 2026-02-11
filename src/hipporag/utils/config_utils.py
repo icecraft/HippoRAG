@@ -176,32 +176,6 @@ class BaseConfig:
         metadata={"help": "Number of lists for IVFFlat index (only used when pgvector_index_type='ivfflat')."}
     )
     
-    # Nebula Graph specific attributes
-    use_nebula_graph: bool = field(
-        default=False,
-        metadata={"help": "Whether to use Nebula Graph for graph storage instead of pickle files."}
-    )
-    nebula_host: str = field(
-        default="127.0.0.1",
-        metadata={"help": "Nebula Graph graphd host address."}
-    )
-    nebula_port: int = field(
-        default=9669,
-        metadata={"help": "Nebula Graph graphd port."}
-    )
-    nebula_user: str = field(
-        default="root",
-        metadata={"help": "Nebula Graph user name."}
-    )
-    nebula_password: str = field(
-        default="nebula",
-        metadata={"help": "Nebula Graph password."}
-    )
-    nebula_space_name: str = field(
-        default="hipporag",
-        metadata={"help": "Nebula Graph space name for storing the knowledge graph."}
-    )
-    
     # Graph library selection
     graph_library: Literal["igraph", "dgraph"] = field(
         default="igraph",

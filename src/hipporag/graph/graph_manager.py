@@ -170,27 +170,15 @@ def create_graph_manager(global_config: BaseConfig,
         node_to_node_stats: Dictionary mapping node pairs to statistics
     
     Returns:
-        GraphManager or NebulaGraphManager instance
+        GraphManager instance
     """
-    if global_config.use_nebula_graph:
-        from .graph_manager_nebula import NebulaGraphManager
-        return NebulaGraphManager(
-            global_config=global_config,
-            working_dir=working_dir,
-            graph=graph,
-            entity_embedding_store=entity_embedding_store,
-            chunk_embedding_store=chunk_embedding_store,
-            fact_embedding_store=fact_embedding_store,
-            node_to_node_stats=node_to_node_stats
-        )
-    else:
-        return GraphManager(
-            global_config=global_config,
-            working_dir=working_dir,
-            graph=graph,
-            entity_embedding_store=entity_embedding_store,
-            chunk_embedding_store=chunk_embedding_store,
-            fact_embedding_store=fact_embedding_store,
-            node_to_node_stats=node_to_node_stats
-        )
+    return GraphManager(
+        global_config=global_config,
+        working_dir=working_dir,
+        graph=graph,
+        entity_embedding_store=entity_embedding_store,
+        chunk_embedding_store=chunk_embedding_store,
+        fact_embedding_store=fact_embedding_store,
+        node_to_node_stats=node_to_node_stats
+    )
 

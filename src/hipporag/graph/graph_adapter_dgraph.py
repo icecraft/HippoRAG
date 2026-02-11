@@ -512,8 +512,8 @@ class DGraphAdapter(GraphInterface):
         # This is a simplified version - you may need to store config separately
         return {}
     
-    @staticmethod
-    def load(filename: str, directed: bool = True, connection_config: Optional[Dict] = None) -> 'GraphInterface':
+    @classmethod
+    def load(cls, filename: str, directed: bool = True, connection_config: Optional[Dict] = None) -> 'GraphInterface':
         """
         Load a graph from a file.
         
@@ -523,7 +523,7 @@ class DGraphAdapter(GraphInterface):
             raise ValueError("connection_config is required to load graph into dgraph")
         
         # Create adapter
-        adapter = DGraphAdapter(connection_config=connection_config, directed=directed, schema_initialized=True)
+        adapter = cls(connection_config=connection_config, directed=directed, schema_initialized=True)
         
         # Load data from file
         with open(filename, 'rb') as f:
@@ -600,13 +600,13 @@ class DGraphAdapter(GraphInterface):
         
         return adapter
     
-    @staticmethod
-    def create(directed: bool = True, connection_config: Optional[Dict] = None) -> 'DGraphAdapter':
+    @classmethod
+    def create(cls, directed: bool = True, connection_config: Optional[Dict] = None) -> 'DGraphAdapter':
         """Create a new empty graph."""
         if connection_config is None:
             # Default to localhost
             connection_config = {"host": "localhost", "port": 9080}
-        return DGraphAdapter(connection_config=connection_config, directed=directed, schema_initialized=False)
+        return cls(connection_config=connection_config, directed=directed, schema_initialized=False)
     
     @property
     def native_client(self) -> Any:

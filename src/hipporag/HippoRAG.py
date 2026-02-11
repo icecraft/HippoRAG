@@ -164,7 +164,7 @@ class HippoRAG:
         self.rerank_filter = DSPyFilter(self)
 
         # Initialize modular components
-        # Use factory function to create appropriate graph manager (supports both pickle and Nebula Graph)
+        # Use factory function to create appropriate graph manager
         self.graph_manager = create_graph_manager(
             global_config=self.global_config,
             working_dir=self.working_dir,

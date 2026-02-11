@@ -2,6 +2,11 @@
 Abstract interface for graph libraries to enable interchangeable graph backends.
 """
 from abc import ABC, abstractmethod
+try:
+    from abc import abstractclassmethod
+except ImportError:
+    # Python < 3.3 doesn't have abstractclassmethod
+    from abc import abstractmethod as abstractclassmethod
 from typing import Dict, List, Tuple, Optional, Any, Iterator
 
 
@@ -107,9 +112,8 @@ class GraphInterface(ABC):
         """
         pass
     
-    @abstractmethod
-    @staticmethod
-    def load(filename: str, directed: bool = True) -> 'GraphInterface':
+    @abstractclassmethod
+    def load(cls, filename: str, directed: bool = True) -> 'GraphInterface':
         """
         Load a graph from a file.
         
@@ -122,9 +126,8 @@ class GraphInterface(ABC):
         """
         pass
     
-    @abstractmethod
-    @staticmethod
-    def create(directed: bool = True) -> 'GraphInterface':
+    @abstractclassmethod
+    def create(cls, directed: bool = True) -> 'GraphInterface':
         """
         Create a new empty graph.
         

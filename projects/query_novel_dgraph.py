@@ -2,13 +2,13 @@
 """
 Query HippoRAG index for character, event, and instrument relations in the novel.
 This version uses:
+- DGraph for knowledge graph storage (distributed graph database)
 - pgvector for embedding storage (PostgreSQL with pgvector extension)
-- Nebula Graph for knowledge graph storage
 
 Prerequisites:
+- DGraph server running (default: localhost:9080)
 - PostgreSQL with pgvector extension installed
-- Nebula Graph server running
-- Required Python packages: psycopg2-binary, nebula3-python
+- Required Python packages: pydgraph, psycopg2-binary
 """
 
 import os
@@ -35,24 +35,26 @@ def load_hipporag(
     embedding_name: str = 'text-embedding-3-small',
     llm_base_url: str = 'https://api.openai.com/v1',
     embedding_base_url: Optional[str] = None,
+    # DGraph configuration
+    dgraph_host: str = 'localhost',
+    dgraph_port: int = 9080,
     # pgvector configuration
     use_pgvector: bool = True,
     pgvector_host: str = 'localhost',
     pgvector_port: int = 5432,
     pgvector_database: str = 'hipporag',
-    pgvector_user: str = 'admin',
-    pgvector_password: str = 'admin',
+    pgvector_user: str = 'postgres',
+    pgvector_password: str = '',
     pgvector_index_type: str = 'ivfflat',
-    pgvector_index_lists: int = 100,
-    # Nebula Graph configuration
-    use_nebula_graph: bool = True,
-    nebula_host: str = '127.0.0.1',
-    nebula_port: int = 9669,
-    nebula_user: str = 'root',
-    nebula_password: str = 'nebula',
-    nebula_space_name: str = 'hipporag'
+    pgvector_index_lists: int = 100
 ):
-    """Load existing HippoRAG instance with pgvector and Nebula Graph."""
+    """Load existing HippoRAG instance with DGraph and pgvector."""
+    # DGraph configuration
+    dgraph_config = {
+        "host": dgraph_host,
+        "port": dgraph_port
+    }
+    
     config = BaseConfig(
         save_dir=save_dir,
         llm_base_url=llm_base_url,
@@ -66,32 +68,25 @@ def load_hipporag(
         qa_top_k=5,
         graph_type="facts_and_sim_passage_node_unidirectional",
         openie_mode="online",
+        # Graph library: use dgraph
+        graph_library="dgraph",
+        dgraph_config=dgraph_config,
         # pgvector configuration
         use_pgvector=use_pgvector,
-        pgvector_host=pgvector_host,
-        pgvector_port=pgvector_port,
-        pgvector_database=pgvector_database,
-        pgvector_user=pgvector_user,
-        pgvector_password=pgvector_password,
-        pgvector_index_type=pgvector_index_type,
-        pgvector_index_lists=pgvector_index_lists,
-        # Nebula Graph configuration
-        use_nebula_graph=use_nebula_graph,
-        nebula_host=nebula_host,
-        nebula_port=nebula_port,
-        nebula_user=nebula_user,
-        nebula_password=nebula_password,
-        nebula_space_name=nebula_space_name
+        pgvector_host=pgvector_host if use_pgvector else '',
+        pgvector_port=pgvector_port if use_pgvector else 5432,
+        pgvector_database=pgvector_database if use_pgvector else '',
+        pgvector_user=pgvector_user if use_pgvector else '',
+        pgvector_password=pgvector_password if use_pgvector else '',
+        pgvector_index_type=pgvector_index_type if use_pgvector else 'ivfflat',
+        pgvector_index_lists=pgvector_index_lists if use_pgvector else 100
     )
     
     logger.info("Configuration:")
+    logger.info(f"  - Using DGraph: {dgraph_host}:{dgraph_port}")
     logger.info(f"  - Using pgvector: {use_pgvector}")
     if use_pgvector:
         logger.info(f"    PostgreSQL: {pgvector_user}@{pgvector_host}:{pgvector_port}/{pgvector_database}")
-    logger.info(f"  - Using Nebula Graph: {use_nebula_graph}")
-    if use_nebula_graph:
-        logger.info(f"    Nebula Graph: {nebula_user}@{nebula_host}:{nebula_port}")
-        logger.info(f"    Space name: {nebula_space_name}")
     
     return HippoRAG(global_config=config)
 
@@ -99,7 +94,7 @@ def load_hipporag(
 def interactive_query(hipporag: HippoRAG):
     """Interactive query mode."""
     print("\n" + "="*60)
-    print("Novel Analysis Query Interface")
+    print("Novel Analysis Query Interface (DGraph + pgvector)")
     print("="*60)
     print("\nExample queries:")
     print("  - What instruments did [character name] use?")
@@ -176,13 +171,13 @@ def batch_query(hipporag: HippoRAG, queries: List[str], output_file: Optional[st
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Query HippoRAG index for novel analysis using pgvector and Nebula Graph"
+        description="Query HippoRAG index for novel analysis (DGraph + pgvector)"
     )
     parser.add_argument(
         '--save_dir',
         type=str,
         default='outputs/novel',
-        help='Directory where HippoRAG metadata is saved (default: outputs/novel)'
+        help='Directory where HippoRAG index is saved (default: outputs/novel)'
     )
     parser.add_argument(
         '--query',
@@ -208,91 +203,75 @@ def main():
         help='Run in interactive mode'
     )
     
+    # DGraph arguments
+    parser.add_argument(
+        '--dgraph_host',
+        type=str,
+        default='localhost',
+        help='DGraph server host (default: localhost)'
+    )
+    parser.add_argument(
+        '--dgraph_port',
+        type=int,
+        default=19081,
+        help='DGraph server port (default: 19081)'
+    )
+    
     # pgvector arguments
+    parser.add_argument(
+        '--use_pgvector',
+        action='store_true',
+        default=True,
+        help='Use pgvector for embedding storage (default: True)'
+    )
+    parser.add_argument(
+        '--no_pgvector',
+        action='store_false',
+        dest='use_pgvector',
+        help='Disable pgvector (use Parquet files instead)'
+    )
     parser.add_argument(
         '--pgvector_host',
         type=str,
-        default=None,
-        help='PostgreSQL host (default: from env PGVECTOR_HOST or localhost)'
+        default='localhost',
+        help='PostgreSQL host (default: localhost)'
     )
     parser.add_argument(
         '--pgvector_port',
         type=int,
-        default=None,
-        help='PostgreSQL port (default: from env PGVECTOR_PORT or 5432)'
+        default=5432,
+        help='PostgreSQL port (default: 5432)'
     )
     parser.add_argument(
         '--pgvector_database',
         type=str,
-        default=None,
-        help='PostgreSQL database name (default: from env PGVECTOR_DATABASE or hipporag)'
+        default='test',
+        help='PostgreSQL database name (default: test)'
     )
     parser.add_argument(
         '--pgvector_user',
         type=str,
         default='admin',
-        help='PostgreSQL user (default: from env PGVECTOR_USER or postgres)'
+        help='PostgreSQL user (default: admin)'
     )
     parser.add_argument(
         '--pgvector_password',
         type=str,
         default='admin',
-        help='PostgreSQL password (default: from env PGVECTOR_PASSWORD or empty)'
+        help='PostgreSQL password (default: admin)'
     )
     parser.add_argument(
         '--pgvector_index_type',
         type=str,
         choices=['ivfflat', 'hnsw'],
-        default=None,
-        help='Vector index type: ivfflat (memory-efficient) or hnsw (faster) (default: from env or ivfflat)'
+        default='ivfflat',
+        help='Vector index type: ivfflat (memory-efficient) or hnsw (faster) (default: ivfflat)'
     )
     parser.add_argument(
         '--pgvector_index_lists',
         type=int,
-        default=None,
-        help='Number of lists for IVFFlat index (default: from env or 100)'
-    )
-    parser.add_argument(
-        '--no_pgvector',
-        action='store_true',
-        help='Disable pgvector (use Parquet files instead)'
-    )
-    
-    # Nebula Graph arguments
-    parser.add_argument(
-        '--nebula_host',
-        type=str,
-        default=None,
-        help='Nebula Graph graphd host (default: from env NEBULA_HOST or 127.0.0.1)'
-    )
-    parser.add_argument(
-        '--nebula_port',
-        type=int,
-        default=None,
-        help='Nebula Graph graphd port (default: from env NEBULA_PORT or 9669)'
-    )
-    parser.add_argument(
-        '--nebula_user',
-        type=str,
-        default=None,
-        help='Nebula Graph user (default: from env NEBULA_USER or root)'
-    )
-    parser.add_argument(
-        '--nebula_password',
-        type=str,
-        default=None,
-        help='Nebula Graph password (default: from env NEBULA_PASSWORD or nebula)'
-    )
-    parser.add_argument(
-        '--nebula_space_name',
-        type=str,
-        default=None,
-        help='Nebula Graph space name (default: from env NEBULA_SPACE_NAME or hipporag)'
-    )
-    parser.add_argument(
-        '--no_nebula',
-        action='store_true',
-        help='Disable Nebula Graph (use pickle files instead)'
+        default=100,
+        help='Number of lists for IVFFlat index (default: 100, only used with --pgvector_index_type=ivfflat)'
     )
     
     args = parser.parse_args()
@@ -303,46 +282,30 @@ def main():
     llm_base_url = os.getenv('LLM_BASE_URL', 'https://api.openai.com/v1')
     embedding_base_url = os.getenv('EMBEDDING_BASE_URL') or llm_base_url
     
-    # pgvector configuration (from args, env, or defaults)
-    use_pgvector = not args.no_pgvector
-    pgvector_host = args.pgvector_host or os.getenv('PGVECTOR_HOST', 'localhost')
-    pgvector_port = args.pgvector_port or int(os.getenv('PGVECTOR_PORT', '5432'))
-    pgvector_database = args.pgvector_database or os.getenv('PGVECTOR_DATABASE', 'hipporag')
-    pgvector_user = args.pgvector_user or os.getenv('PGVECTOR_USER', 'postgres')
-    pgvector_password = args.pgvector_password or os.getenv('PGVECTOR_PASSWORD', '')
-    pgvector_index_type = args.pgvector_index_type or os.getenv('PGVECTOR_INDEX_TYPE', 'ivfflat')
-    pgvector_index_lists = args.pgvector_index_lists or int(os.getenv('PGVECTOR_INDEX_LISTS', '100'))
-    
-    # Nebula Graph configuration (from args, env, or defaults)
-    use_nebula_graph = not args.no_nebula
-    nebula_host = args.nebula_host or os.getenv('NEBULA_HOST', '127.0.0.1')
-    nebula_port = args.nebula_port or int(os.getenv('NEBULA_PORT', '9669'))
-    nebula_user = args.nebula_user or os.getenv('NEBULA_USER', 'root')
-    nebula_password = args.nebula_password or os.getenv('NEBULA_PASSWORD', 'nebula')
-    nebula_space_name = args.nebula_space_name or os.getenv('NEBULA_SPACE_NAME', 'hipporag')
-    
     # Load HippoRAG
     logger.info(f"Loading HippoRAG index from: {args.save_dir}")
+    logger.info(f"Using DGraph at {args.dgraph_host}:{args.dgraph_port}")
+    if args.use_pgvector:
+        logger.info(f"Using pgvector at {args.pgvector_user}@{args.pgvector_host}:{args.pgvector_port}/{args.pgvector_database}")
+    
     hipporag = load_hipporag(
         save_dir=args.save_dir,
         llm_name=llm_name,
         embedding_name=embedding_name,
         llm_base_url=llm_base_url,
         embedding_base_url=embedding_base_url,
-        use_pgvector=use_pgvector,
-        pgvector_host=pgvector_host,
-        pgvector_port=pgvector_port,
-        pgvector_database=pgvector_database,
-        pgvector_user=pgvector_user,
-        pgvector_password=pgvector_password,
-        pgvector_index_type=pgvector_index_type,
-        pgvector_index_lists=pgvector_index_lists,
-        use_nebula_graph=use_nebula_graph,
-        nebula_host=nebula_host,
-        nebula_port=nebula_port,
-        nebula_user=nebula_user,
-        nebula_password=nebula_password,
-        nebula_space_name=nebula_space_name
+        # DGraph configuration
+        dgraph_host=args.dgraph_host,
+        dgraph_port=args.dgraph_port,
+        # pgvector configuration
+        use_pgvector=args.use_pgvector,
+        pgvector_host=args.pgvector_host,
+        pgvector_port=args.pgvector_port,
+        pgvector_database=args.pgvector_database,
+        pgvector_user=args.pgvector_user,
+        pgvector_password=args.pgvector_password,
+        pgvector_index_type=args.pgvector_index_type,
+        pgvector_index_lists=args.pgvector_index_lists
     )
     logger.info("Index loaded successfully!")
     
