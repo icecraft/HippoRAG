@@ -1,7 +1,6 @@
 openai==1.92.1
 networkx==3.4.2
 pydantic==2.10.4
-python_igraph==0.11.8
 tenacity==8.5.0
 tiktoken==0.7.0
 nest_asyncio
@@ -12,6 +11,5 @@ einops
 boto3
 filelock
 python-dotenv
-pyarrow
-fastparquet
 psycopg2-binary>=2.9.0
+pydgraph>=25.0.0

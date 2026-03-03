@@ -8,6 +8,7 @@ except ImportError:
     # Python < 3.3 doesn't have abstractclassmethod
     from abc import abstractmethod as abstractclassmethod
 from typing import Dict, List, Tuple, Optional, Any, Iterator
+import numpy as np
 
 
 class GraphInterface(ABC):
@@ -136,6 +137,31 @@ class GraphInterface(ABC):
             
         Returns:
             GraphInterface instance
+        """
+        pass
+
+    def delete_vertices(self, node_names: List[str]):
+        """
+        Delete vertices by their name attribute.
+        Override in adapters that support vertex deletion.
+        """
+        raise NotImplementedError("delete_vertices is not supported by this graph backend")
+
+    @abstractmethod
+    def personalized_pagerank(self,
+                             reset_prob: np.ndarray,
+                             damping: float = 0.5,
+                             weights: Optional[str] = 'weight') -> np.ndarray:
+        """
+        Run Personalized PageRank.
+        
+        Args:
+            reset_prob: Reset probability for each vertex (index-aligned with get_vertices order)
+            damping: Damping factor (alpha in standard PPR)
+            weights: Edge attribute name for weights, or None for unweighted
+        
+        Returns:
+            1D array of PPR scores, index-aligned with vertices
         """
         pass
 

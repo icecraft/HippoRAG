@@ -1,0 +1,123 @@
+services:
+  zero1:
+    image: dgraph/dgraph:latest
+    container_name: zero1
+    working_dir: /data/zero1
+    ports:
+      - 5080:5080
+      - 6080:6080
+    labels:
+      cluster: test
+      service: zero
+    command:
+      dgraph zero --port_offset 0 --my=zero1:5080 --replicas 3 --raft idx=1 --logtostderr -v=2
+      --bindall --expose_trace --profile_mode block --block_rate 10
+  zero2:
+    image: dgraph/dgraph:latest
+    container_name: zero2
+    working_dir: /data/zero2
+    depends_on:
+      - zero1
+    ports:
+      - 5082:5082
+      - 6082:6082
+    labels:
+      cluster: test
+      service: zero
+    command:
+      dgraph zero --port_offset 2 --my=zero2:5082 --replicas 3 --raft idx=2 --logtostderr -v=2
+      --peer=zero1:5080
+  zero3:
+    image: dgraph/dgraph:latest
+    container_name: zero3
+    working_dir: /data/zero3
+    depends_on:
+      - zero2
+    ports:
+      - 5083:5083
+      - 6083:6083
+    labels:
+      cluster: test
+      service: zero
+    command:
+      dgraph zero --port_offset 3 --my=zero3:5083 --replicas 3 --raft idx=3 --logtostderr -v=2
+      --peer=zero1:5080
+  alpha1:
+    image: dgraph/dgraph:latest
+    container_name: alpha1
+    working_dir: /data/alpha1
+    volumes:
+      - type: bind
+        source: ./hmac-secret
+        target: /dgraph-acl/hmac-secret
+        read_only: true
+      - type: bind
+        source: ./tls
+        target: /dgraph-tls
+        read_only: true
+    ports:
+      - 8080:8080
+      - 9080:9080
+    labels:
+      cluster: test
+      service: alpha
+    command:
+      dgraph alpha --port_offset 0 --my=alpha1:7080  --zero=zero1:5080 --expose_trace --trace
+      ratio=1.0 --profile_mode block --block_rate 10 --logtostderr -v=2 --security
+      whitelist=0.0.0.0/0  --acl "secret-file=/dgraph-acl/hmac-secret;access-ttl=3s;refresh-ttl=5s"
+      --tls
+      "client-auth-type=REQUIREANDVERIFY;ca-cert=/dgraph-tls/ca.crt;server-cert=/dgraph-tls/node.crt;server-key=/dgraph-tls/node.key"
+  alpha2:
+    image: dgraph/dgraph:latest
+    container_name: alpha2
+    working_dir: /data/alpha2
+    depends_on:
+      - alpha1
+    volumes:
+      - type: bind
+        source: ./hmac-secret
+        target: /dgraph-acl/hmac-secret
+        read_only: true
+      - type: bind
+        source: ./tls
+        target: /dgraph-tls
+        read_only: true
+    ports:
+      - 8082:8082
+      - 9082:9082
+    labels:
+      cluster: test
+      service: alpha
+    command:
+      dgraph alpha --port_offset 2 --my=alpha2:7082  --zero=zero1:5080 --expose_trace --trace
+      ratio=1.0 --profile_mode block --block_rate 10 --logtostderr -v=2 --security
+      whitelist=0.0.0.0/0 --acl "secret-file=/dgraph-acl/hmac-secret;access-ttl=3s;refresh-ttl=5s"
+      --tls
+      "client-auth-type=REQUIREANDVERIFY;ca-cert=/dgraph-tls/ca.crt;server-cert=/dgraph-tls/node.crt;server-key=/dgraph-tls/node.key"
+  alpha3:
+    image: dgraph/dgraph:latest
+    container_name: alpha3
+    working_dir: /data/alpha3
+    depends_on:
+      - alpha2
+    volumes:
+      - type: bind
+        source: ./hmac-secret
+        target: /dgraph-acl/hmac-secret
+        read_only: true
+      - type: bind
+        source: ./tls
+        target: /dgraph-tls
+        read_only: true
+    ports:
+      - 8083:8083
+      - 9083:9083
+    labels:
+      cluster: test
+      service: alpha
+    command:
+      dgraph alpha --port_offset 3 --my=alpha3:7083  --zero=zero1:5080 --expose_trace --trace
+      ratio=1.0 --profile_mode block --block_rate 10 --logtostderr -v=2 --security
+      whitelist=0.0.0.0/0 --acl "secret-file=/dgraph-acl/hmac-secret;access-ttl=3s;refresh-ttl=5s"
+      --tls
+      "client-auth-type=REQUIREANDVERIFY;ca-cert=/dgraph-tls/ca.crt;server-cert=/dgraph-tls/node.crt;server-key=/dgraph-tls/node.key"

@@ -4,8 +4,6 @@ import time
 from typing import List, Dict, Tuple, Set, Optional
 import numpy as np
 from tqdm import tqdm
-import igraph as ig
-
 from ..utils.config_utils import BaseConfig
 from ..embedding_store import EmbeddingStore
 from ..embedding_model import BaseEmbeddingModel
@@ -40,7 +38,7 @@ class Retriever:
                  entity_embedding_store: EmbeddingStore,
                  fact_embedding_store: EmbeddingStore,
                  embedding_model: BaseEmbeddingModel,
-                 graph: ig.Graph,
+                 graph,
                  graph_builder: GraphBuilder,
                  graph_manager: GraphManager,
                  openie_manager: OpenIEManager,
@@ -121,11 +119,11 @@ class Retriever:
             if actual_node_count == 0 and expected_node_count > 0:
                 logger.info(f"Initializing graph with {expected_node_count} nodes")
                 self.graph_builder.add_new_nodes()
-                self.graph_manager.save_igraph()
+                self.graph_manager.save_graph()
 
         # Create mapping from node name to vertex index
         try:
-            igraph_name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.vs)}
+            name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.get_vertices())}
             self.node_name_to_vertex_idx = igraph_name_to_idx
             
             # Check if all entity and passage nodes are in the graph
@@ -136,13 +134,13 @@ class Retriever:
                 logger.warning(f"Missing nodes in graph: {len(missing_entity_nodes)} entity nodes, {len(missing_passage_nodes)} passage nodes")
                 # If nodes are missing, rebuild the graph
                 self.graph_builder.add_new_nodes()
-                self.graph_manager.save_igraph()
+                self.graph_manager.save_graph()
                 # Update the mapping
-                igraph_name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.vs)}
-                self.node_name_to_vertex_idx = igraph_name_to_idx
+                name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.get_vertices())}
+                self.node_name_to_vertex_idx = name_to_idx
             
-            self.entity_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.entity_node_keys]
-            self.passage_node_idxs = [igraph_name_to_idx[node_key] for node_key in self.passage_node_keys]
+            self.entity_node_idxs = [name_to_idx[node_key] for node_key in self.entity_node_keys]
+            self.passage_node_idxs = [name_to_idx[node_key] for node_key in self.passage_node_keys]
         except Exception as e:
             logger.error(f"Error creating node index mapping: {str(e)}")
             self.node_name_to_vertex_idx = {}
@@ -372,9 +370,10 @@ class Retriever:
         # Assigning phrase weights based on selected facts from previous steps.
         linking_score_map = {}
         phrase_scores = {}
-        phrase_weights = np.zeros(len(self.graph.vs['name']))
-        passage_weights = np.zeros(len(self.graph.vs['name']))
-        number_of_occurs = np.zeros(len(self.graph.vs['name']))
+        n = self.graph.vcount()
+        phrase_weights = np.zeros(n)
+        passage_weights = np.zeros(n)
+        number_of_occurs = np.zeros(n)
 
         phrases_and_ids = set()
 
@@ -523,12 +522,7 @@ class Retriever:
             damping = 0.5
         reset_prob = np.where(np.isnan(reset_prob) | (reset_prob < 0), 0, reset_prob)
         pagerank_scores = self.graph.personalized_pagerank(
-            vertices=range(len(self.node_name_to_vertex_idx)),
-            damping=damping,
-            directed=False,
-            weights='weight',
-            reset=reset_prob,
-            implementation='prpack'
+            reset_prob, damping=damping, weights='weight'
         )
 
         doc_scores = np.array([pagerank_scores[idx] for idx in self.passage_node_idxs])

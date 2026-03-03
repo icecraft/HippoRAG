@@ -6,6 +6,7 @@ import json
 import pickle
 import uuid
 from typing import Dict, List, Tuple, Optional, Any, Iterator
+import numpy as np
 
 try:
     import pydgraph
@@ -608,7 +609,98 @@ class DGraphAdapter(GraphInterface):
             connection_config = {"host": "localhost", "port": 9080}
         return cls(connection_config=connection_config, directed=directed, schema_initialized=False)
     
+    def delete_vertices(self, node_names: List[str]):
+        """Delete vertices by name. Not yet implemented for DGraph."""
+        raise NotImplementedError("delete_vertices not yet implemented for DGraphAdapter")
+
     @property
     def native_client(self) -> Any:
         """Get the underlying pydgraph.DgraphClient object for direct access if needed."""
         return self._client
+
+    def personalized_pagerank(self,
+                             reset_prob: np.ndarray,
+                             damping: float = 0.5,
+                             weights: Optional[str] = 'weight') -> np.ndarray:
+        """Run Personalized PageRank by exporting to networkx and computing PPR."""
+        try:
+            import networkx as nx
+        except ImportError:
+            raise ImportError("networkx is required for PPR with DGraphAdapter. Install with: pip install networkx")
+        
+        if not self._vertex_cache:
+            self._refresh_vertex_cache()
+        if not self._edge_cache:
+            self._refresh_edge_cache()
+        
+        # Build ordered vertex list (by index)
+        n = len(self._vertex_cache)
+        idx_to_name = {}
+        for uid, idx in self._uid_to_idx.items():
+            idx_to_name[idx] = self._vertex_cache[uid].get("name")
+        
+        names_ordered = [idx_to_name.get(i) for i in range(n) if idx_to_name.get(i) is not None]
+        
+        G = nx.DiGraph() if self._directed else nx.Graph()
+        for v in self._vertex_cache.values():
+            name = v.get("name")
+            if name:
+                G.add_node(name)
+        
+        for edge in self._edge_cache:
+            src = edge.target_name or idx_to_name.get(edge.target)
+            tgt = edge.source_name or idx_to_name.get(edge.source)
+            if src and tgt:
+                w = edge.get(weights, 1.0) if weights else 1.0
+                G.add_edge(edge.source_name if hasattr(edge, 'source_name') else src,
+                          edge.target_name if hasattr(edge, 'target_name') else tgt, weight=w)
+        
+        for edge in self._edge_cache:
+            src_name = None
+            tgt_name = None
+            for uid, v in self._vertex_cache.items():
+                if self._uid_to_idx.get(uid) == edge.source:
+                    src_name = v.get("name")
+                if self._uid_to_idx.get(uid) == edge.target:
+                    tgt_name = v.get("name")
+            if src_name and tgt_name:
+                w = edge.get(weights, 1.0) if weights else 1.0
+                G.add_edge(src_name, tgt_name, weight=w)
+        
+        # Simpler: iterate edges and use source/target names from DGraphEdge
+        G = nx.DiGraph() if self._directed else nx.Graph()
+        for v in self._vertex_cache.values():
+            name = v.get("name")
+            if name:
+                G.add_node(name)
+        for edge in self._edge_cache:
+            sn = edge.source_name
+            tn = edge.target_name
+            if sn and tn:
+                w = edge.get(weights, 1.0) if weights else 1.0
+                G.add_edge(sn, tn, weight=w)
+        
+        # Build personalization dict (index -> name, reset_prob index-aligned)
+        personalization = {}
+        for idx in range(min(len(reset_prob), n)):
+            name = idx_to_name.get(idx)
+            if name and reset_prob[idx] > 0:
+                personalization[name] = float(reset_prob[idx])
+        
+        if not personalization:
+            first_name = idx_to_name.get(0)
+            personalization = {first_name: 1.0} if first_name else {}
+        
+        total = sum(personalization.values())
+        if total > 0:
+            personalization = {k: v / total for k, v in personalization.items()}
+        
+        scores_dict = nx.pagerank(G, alpha=damping, personalization=personalization, weight=weights or 'weight')
+        
+        result = np.zeros(n, dtype=np.float64)
+        for idx in range(n):
+            name = idx_to_name.get(idx)
+            if name:
+                result[idx] = scores_dict.get(name, 0.0)
+        
+        return result

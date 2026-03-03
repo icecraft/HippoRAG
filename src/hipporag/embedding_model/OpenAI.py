@@ -4,7 +4,6 @@ from typing import List, Optional
 import numpy as np
 from tqdm import tqdm
 from openai import OpenAI
-from openai import AzureOpenAI
 
 from ..utils.config_utils import BaseConfig
 from ..utils.logging_utils import get_logger
@@ -28,13 +27,7 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         logger.debug(
             f"Initializing {self.__class__.__name__}'s embedding model with params: {self.embedding_config.model_init_params}")
 
-        if self.global_config.azure_embedding_endpoint is None:
-            self.client = OpenAI(
-                base_url=self.global_config.embedding_base_url
-            )
-        else:
-            self.client = AzureOpenAI(api_version=self.global_config.azure_embedding_endpoint.split('api-version=')[1],
-                                      azure_endpoint=self.global_config.azure_embedding_endpoint)
+        self.client = OpenAI(base_url=self.global_config.embedding_base_url)
 
 
     def _init_embedding_config(self) -> None:

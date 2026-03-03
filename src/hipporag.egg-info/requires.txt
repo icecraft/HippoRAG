@@ -1,6 +1,5 @@
 openai==1.92.1
 networkx==3.4.2
-python_igraph==0.11.8
 tiktoken==0.7.0
 pydantic==2.10.4
 tenacity==8.5.0
@@ -8,3 +7,5 @@ einops
 tqdm
 boto3
 filelock
+psycopg2-binary>=2.9.0
+pydgraph>=25.0.0

@@ -6,7 +6,7 @@ from typing import List, Set, Dict, Tuple
 import numpy as np
 from collections import defaultdict
 from tqdm import tqdm
-import igraph as ig
+
 import re
 import time
 
@@ -42,9 +42,7 @@ class HippoRAG:
                  llm_model_name=None,
                  llm_base_url=None,
                  embedding_model_name=None,
-                 embedding_base_url=None,
-                 azure_endpoint=None,
-                 azure_embedding_endpoint=None):
+                 embedding_base_url=None):
         """
         Initializes an instance of the class and its related components.
 
@@ -100,12 +98,6 @@ class HippoRAG:
 
         if embedding_base_url is not None:
             self.global_config.embedding_base_url = embedding_base_url
-
-        if azure_endpoint is not None:
-            self.global_config.azure_endpoint = azure_endpoint
-
-        if azure_embedding_endpoint is not None:
-            self.global_config.azure_embedding_endpoint = azure_embedding_endpoint
 
         _print_config = ",\n  ".join([f"{k} = {v}" for k, v in asdict(self.global_config).items()])
         logger.debug(f"HippoRAG init with config:\n  {_print_config}\n")
@@ -555,7 +547,7 @@ class HippoRAG:
 
     def save_igraph(self):
         """Delegate to GraphManager."""
-        return self.graph_manager.save_igraph()
+        return self.graph_manager.save_graph()
 
     def get_graph_info(self) -> Dict:
         """Delegate to GraphManager."""
@@ -775,9 +767,10 @@ class HippoRAG:
         #Assigning phrase weights based on selected facts from previous steps.
         linking_score_map = {}  # from phrase to the average scores of the facts that contain the phrase
         phrase_scores = {}  # store all fact scores for each phrase regardless of whether they exist in the knowledge graph or not
-        phrase_weights = np.zeros(len(self.graph.vs['name']))
-        passage_weights = np.zeros(len(self.graph.vs['name']))
-        number_of_occurs = np.zeros(len(self.graph.vs['name']))
+        n = self.graph.vcount()
+        phrase_weights = np.zeros(n)
+        passage_weights = np.zeros(n)
+        number_of_occurs = np.zeros(n)
 
         phrases_and_ids = set()
 

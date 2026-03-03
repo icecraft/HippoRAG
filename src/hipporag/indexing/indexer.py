@@ -1,7 +1,5 @@
 import logging
 from typing import List, Dict, Set
-import igraph as ig
-
 from ..utils.config_utils import BaseConfig
 from ..embedding_store import EmbeddingStore
 from ..information_extraction import OpenIE
@@ -30,7 +28,7 @@ class Indexer:
                  fact_embedding_store: EmbeddingStore,
                  openie: OpenIE,
                  openie_manager: OpenIEManager,
-                 graph: ig.Graph,
+                 graph,
                  graph_builder: GraphBuilder,
                  graph_manager: GraphManager,
                  node_to_node_stats: Dict,
@@ -126,7 +124,7 @@ class Indexer:
             self.graph_builder.add_synonymy_edges(self.entity_embedding_store, self.global_config)
 
             self.graph_manager.augment_graph(self.graph_builder)
-            self.graph_manager.save_igraph()
+            self.graph_manager.save_graph()
     
     def delete(self, 
                docs_to_delete: List[str],
@@ -213,5 +211,5 @@ class Indexer:
 
         # Delete Nodes from Graph
         self.graph.delete_vertices(list(filtered_ent_ids_to_delete) + list(chunk_ids_to_delete))
-        self.graph_manager.save_igraph()
+        self.graph_manager.save_graph()
 

@@ -1,10 +1,14 @@
 import os
 import logging
-from typing import Dict
-import igraph as ig
+from typing import Dict, TYPE_CHECKING
 
 from ..utils.config_utils import BaseConfig
 from ..embedding_store import EmbeddingStore
+from .graph_factory import create_graph
+from .graph_interface import GraphInterface
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +21,7 @@ class GraphManager:
     def __init__(self, 
                  global_config: BaseConfig,
                  working_dir: str,
-                 graph: ig.Graph,
+                 graph,
                  entity_embedding_store: EmbeddingStore,
                  chunk_embedding_store: EmbeddingStore,
                  fact_embedding_store: EmbeddingStore,
@@ -28,7 +32,7 @@ class GraphManager:
         Args:
             global_config: Global configuration
             working_dir: Working directory path
-            graph: The igraph graph object
+            graph: GraphInterface instance (or None during initialization)
             entity_embedding_store: Entity embedding store
             chunk_embedding_store: Chunk embedding store
             fact_embedding_store: Fact embedding store
@@ -42,43 +46,45 @@ class GraphManager:
         self.fact_embedding_store = fact_embedding_store
         self.node_to_node_stats = node_to_node_stats
         
-        self._graph_pickle_filename = os.path.join(
-            self.working_dir, f"graph.pickle"
+        self._graph_save_filename = os.path.join(
+            self.working_dir, "graph.pickle"
         )
     
-    def initialize_graph(self) -> ig.Graph:
+    def initialize_graph(self) -> GraphInterface:
         """
-        Initializes a graph using a Pickle file if available or creates a new graph.
-
-        The function attempts to load a pre-existing graph stored in a Pickle file. If the file
-        is not present or the graph needs to be created from scratch, it initializes a new directed
-        or undirected graph based on the global configuration. If the graph is loaded successfully
-        from the file, pertinent information about the graph (number of nodes and edges) is logged.
+        Initializes a graph using saved file if available or creates a new graph.
 
         Returns:
-            ig.Graph: A pre-loaded or newly initialized graph.
+            GraphInterface: A pre-loaded or newly initialized graph.
         """
-        preloaded_graph = None
+        graph_library = getattr(self.global_config, 'graph_library', 'dgraph').lower()
 
-        if not self.global_config.force_index_from_scratch:
-            if os.path.exists(self._graph_pickle_filename):
-                preloaded_graph = ig.Graph.Read_Pickle(self._graph_pickle_filename)
-
-        if preloaded_graph is None:
-            return ig.Graph(directed=self.global_config.is_directed_graph)
-        else:
-            logger.info(
-                f"Loaded graph from {self._graph_pickle_filename} with {preloaded_graph.vcount()} nodes, {preloaded_graph.ecount()} edges"
-            )
-            return preloaded_graph
+        if not self.global_config.force_index_from_scratch and os.path.exists(self._graph_save_filename):
+            try:
+                if graph_library == 'dgraph':
+                    from .graph_adapter_dgraph import DGraphAdapter
+                    conn = getattr(self.global_config, 'dgraph_config', None) or {"host": "localhost", "port": 9080}
+                    preloaded = DGraphAdapter.load(
+                        self._graph_save_filename,
+                        directed=self.global_config.is_directed_graph,
+                        connection_config=conn
+                    )
+                    logger.info(
+                        f"Loaded graph from {self._graph_save_filename} with {preloaded.vcount()} nodes, {preloaded.ecount()} edges"
+                    )
+                    return preloaded
+            except Exception as e:
+                logger.warning(f"Failed to load graph from file: {e}. Creating new graph.")
+        
+        return create_graph(self.global_config, directed=self.global_config.is_directed_graph)
     
-    def save_igraph(self):
-        """Save the graph to a pickle file."""
+    def save_graph(self):
+        """Save the graph to file."""
         logger.info(
-            f"Writing graph with {len(self.graph.vs())} nodes, {len(self.graph.es())} edges"
+            f"Writing graph with {self.graph.vcount()} nodes, {self.graph.ecount()} edges"
         )
-        self.graph.write_pickle(self._graph_pickle_filename)
-        logger.info(f"Saving graph completed!")
+        self.graph.save(self._graph_save_filename)
+        logger.info("Saving graph completed!")
     
     def get_graph_info(self) -> Dict:
         """
@@ -152,7 +158,7 @@ class GraphManager:
 
 def create_graph_manager(global_config: BaseConfig,
                         working_dir: str,
-                        graph: ig.Graph,
+                        graph: GraphInterface,
                         entity_embedding_store: EmbeddingStore,
                         chunk_embedding_store: EmbeddingStore,
                         fact_embedding_store: EmbeddingStore,
@@ -163,7 +169,7 @@ def create_graph_manager(global_config: BaseConfig,
     Parameters:
         global_config: BaseConfig instance
         working_dir: Working directory path
-        graph: The igraph graph object
+        graph: GraphInterface instance
         entity_embedding_store: Entity embedding store
         chunk_embedding_store: Chunk embedding store
         fact_embedding_store: Fact embedding store

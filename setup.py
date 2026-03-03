@@ -18,16 +18,14 @@ setuptools.setup(
     install_requires=[
         "openai==1.92.1",
         "networkx==3.4.2",
-        "python_igraph==0.11.8",
         "tiktoken==0.7.0",
         "pydantic==2.10.4",
         "tenacity==8.5.0",
         "einops", # No version specified
         "tqdm", # No version specified
         "boto3", # No version specified
-        "filelock", # No version specified
-        "pyarrow", # No version specified
-        "fastparquet", # No version specified
-        "psycopg2-binary>=2.9.0", # For pgvector support
+        "filelock",  # No version specified
+        "psycopg2-binary>=2.9.0",  # For pgvector support
+        "pydgraph>=25.0.0",  # For dgraph graph storage
     ]
 )

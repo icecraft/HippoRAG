@@ -10,8 +10,6 @@ import httpx
 import openai
 from filelock import FileLock
 from openai import OpenAI
-from openai import AzureOpenAI
-from packaging import version
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from ..utils.config_utils import BaseConfig
@@ -144,11 +142,7 @@ class CacheOpenAI(BaseLLM):
 
         self.max_retries = kwargs.get("max_retries", 2)
 
-        if self.global_config.azure_endpoint is None:
-            self.openai_client = OpenAI(base_url=self.llm_base_url, http_client=client, max_retries=self.max_retries)
-        else:
-            self.openai_client = AzureOpenAI(api_version=self.global_config.azure_endpoint.split('api-version=')[1],
-                                             azure_endpoint=self.global_config.azure_endpoint, max_retries=self.max_retries)
+        self.openai_client = OpenAI(base_url=self.llm_base_url, http_client=client, max_retries=self.max_retries)
 
     def _init_llm_config(self) -> None:
         config_dict = self.global_config.__dict__
@@ -178,9 +172,6 @@ class CacheOpenAI(BaseLLM):
             params.update(kwargs)
         params["messages"] = messages
         logger.debug(f"Calling OpenAI GPT API with:\n{params}")
-
-        if version.parse(openai.__version__) < version.parse("1.45.0"): # if openai version is too old to use 'max_completion_tokens' argument
-            params['max_tokens'] = params.pop('max_completion_tokens')
 
         response = self.openai_client.chat.completions.create(**params)
 

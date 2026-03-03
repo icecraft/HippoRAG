@@ -181,44 +181,30 @@ class EmbeddingStore:
 
 def create_embedding_store(embedding_model, config, namespace: str):
     """
-    Factory function to create appropriate embedding store based on config.
-    
+    Create embedding store using pgvector.
+
     Parameters:
         embedding_model: The embedding model instance
         config: BaseConfig instance
         namespace: Namespace identifier ('chunk', 'entity', or 'fact')
-    
+
     Returns:
-        EmbeddingStore or PgVectorEmbeddingStore instance
+        PgVectorEmbeddingStore instance
     """
-    if config.use_pgvector:
-        from .embedding_store_pgvector import PgVectorEmbeddingStore
-        db_config = {
-            'host': config.pgvector_host,
-            'port': config.pgvector_port,
-            'database': config.pgvector_database,
-            'user': config.pgvector_user,
-            'password': config.pgvector_password
-        }
-        return PgVectorEmbeddingStore(
-            embedding_model=embedding_model,
-            db_config=db_config,
-            batch_size=config.embedding_batch_size,
-            namespace=namespace,
-            index_type=config.pgvector_index_type,
-            index_lists=config.pgvector_index_lists,
-            force_index_from_scratch=config.force_index_from_scratch
-        )
-    else:
-        # Calculate working directory path
-        llm_label = config.llm_name.replace("/", "_")
-        embedding_label = config.embedding_model_name.replace("/", "_")
-        working_dir = os.path.join(config.save_dir, f"{llm_label}_{embedding_label}")
-        db_filename = os.path.join(working_dir, f"{namespace}_embeddings")
-        
-        return EmbeddingStore(
-            embedding_model=embedding_model,
-            db_filename=db_filename,
-            batch_size=config.embedding_batch_size,
-            namespace=namespace
-        )
+    from .embedding_store_pgvector import PgVectorEmbeddingStore
+    db_config = {
+        'host': config.pgvector_host,
+        'port': config.pgvector_port,
+        'database': config.pgvector_database,
+        'user': config.pgvector_user,
+        'password': config.pgvector_password
+    }
+    return PgVectorEmbeddingStore(
+        embedding_model=embedding_model,
+        db_config=db_config,
+        batch_size=config.embedding_batch_size,
+        namespace=namespace,
+        index_type=config.pgvector_index_type,
+        index_lists=config.pgvector_index_lists,
+        force_index_from_scratch=config.force_index_from_scratch
+    )

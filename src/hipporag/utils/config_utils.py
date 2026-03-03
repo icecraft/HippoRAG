@@ -144,8 +144,8 @@ class BaseConfig:
     
     # pgvector specific attributes
     use_pgvector: bool = field(
-        default=False,
-        metadata={"help": "Whether to use pgvector for embedding storage instead of Parquet files."}
+        default=True,
+        metadata={"help": "Whether to use pgvector for embedding storage (always True in streamlined build)."}
     )
     pgvector_host: str = field(
         default="localhost",
@@ -177,9 +177,9 @@ class BaseConfig:
     )
     
     # Graph library selection
-    graph_library: Literal["igraph", "dgraph"] = field(
-        default="igraph",
-        metadata={"help": "Graph library to use: 'igraph' (default, in-memory) or 'dgraph' (distributed graph database)."}
+    graph_library: Literal["dgraph"] = field(
+        default="dgraph",
+        metadata={"help": "Graph library to use: 'dgraph' (distributed graph database)."}
     )
     dgraph_config: Optional[dict] = field(
         default=None,

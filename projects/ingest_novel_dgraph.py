@@ -149,6 +149,7 @@ def ingest_chapters(
     logger.info("Initializing HippoRAG with DGraph...")
     hipporag = HippoRAG(global_config=config)
     
+    print(config)
     # Index chapters
     logger.info("Starting indexing...")
     hipporag.index(docs=chapters)
@@ -204,12 +205,13 @@ def main():
     parser.add_argument(
         '--use_pgvector',
         action='store_true',
+        default=True,
         help='Use pgvector for embedding storage (PostgreSQL with pgvector extension)'
     )
     parser.add_argument(
         '--pgvector_host',
         type=str,
-        default='localhost',
+        default='127.0.0.1',
         help='PostgreSQL host (default: localhost, only used with --use_pgvector)'
     )
     parser.add_argument(

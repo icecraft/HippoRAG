@@ -1,12 +1,12 @@
 # DGraph 支持说明
 
-本文档说明如何在 HippoRAG 中使用 dgraph 作为 igraph 的替换。
+本文档说明 HippoRAG 精简版中使用 dgraph 作为图存储。
 
 ## 概述
 
-HippoRAG 现在支持通过抽象接口使用不同的图库。目前支持：
-- **igraph** (默认): 内存中的图库，用于图计算
-- **dgraph** (待实现): 分布式图数据库
+精简版 HippoRAG 仅支持：
+- **dgraph**: 分布式图数据库（图存储）
+- **pgvector**: PostgreSQL 扩展（向量存储）
 
 ## 架构设计
 
@@ -19,9 +19,7 @@ HippoRAG 现在支持通过抽象接口使用不同的图库。目前支持：
 
 ### 2. 适配器模式
 
-每个图库通过适配器实现 `GraphInterface`：
-- `IGraphAdapter`: igraph 的适配器（已实现）
-- `DGraphAdapter`: dgraph 的适配器（待实现）
+DGraph 通过 `DGraphAdapter` 实现 `GraphInterface`。
 
 ### 3. 工厂函数
 
@@ -29,20 +27,7 @@ HippoRAG 现在支持通过抽象接口使用不同的图库。目前支持：
 
 ## 使用方法
 
-### 使用 igraph (默认)
-
-```python
-from hipporag import BaseConfig, HippoRAG
-
-config = BaseConfig(
-    graph_library="igraph",  # 默认值
-    # ... 其他配置
-)
-
-hipporag = HippoRAG(global_config=config)
-```
-
-### 使用 dgraph (待实现)
+### 使用 dgraph（默认）
 
 ```python
 from hipporag import BaseConfig, HippoRAG
@@ -76,6 +61,7 @@ hipporag = HippoRAG(global_config=config)
 - ✅ `get_vertex_attributes()`: 获取节点属性
 - ✅ `save()` / `load()`: 图的持久化（导出/导入）
 - ✅ Schema 自动初始化
+- ✅ `personalized_pagerank()`: 通过 networkx 计算 PPR
 
 ## 安装和配置
 
@@ -104,29 +90,10 @@ hipporag = HippoRAG(global_config=config)
 
 ## 注意事项
 
-1. **兼容性**: 当前代码仍直接使用 igraph，需要逐步迁移到 GraphInterface
-2. **性能**: dgraph 是分布式数据库，适合大规模图，但可能有延迟
-3. **功能**: 某些 igraph 特定功能（如 PPR）可能需要特殊处理
-
-## 迁移计划
-
-要完全支持 dgraph，需要：
-
-1. ✅ 创建 GraphInterface 抽象接口
-2. ✅ 实现 IGraphAdapter
-3. ⏳ 实现 DGraphAdapter（需要 dgraph 客户端库）
-4. ⏳ 更新 GraphBuilder 使用 GraphInterface
-5. ⏳ 更新 GraphManager 使用 GraphInterface
-6. ⏳ 更新 Retriever 使用 GraphInterface
-7. ⏳ 更新所有直接访问 `graph.vs` 和 `graph.es` 的代码
-
-## 当前状态
-
-- ✅ 抽象接口已创建
-- ✅ igraph 适配器已实现
-- ✅ dgraph 适配器已实现（基于 dgraph_examples）
-- ✅ 配置选项已添加
-- ⏳ 代码迁移待完成（需要将现有代码从直接使用 igraph 迁移到 GraphInterface）
+1. **前置条件**: 需运行 DGraph 服务（默认 `localhost:9080`）
+2. **性能**: DGraph 为分布式数据库，适合大规模图，单次操作可能有网络延迟
+3. **PPR**: DGraphAdapter 通过导出到 networkx 实现 personalized_pagerank
+4. **删除节点**: `delete_vertices` 在 DGraphAdapter 中尚未实现，Indexer 的 delete 功能在使用 dgraph 时受限
 
 ## 实现细节
 

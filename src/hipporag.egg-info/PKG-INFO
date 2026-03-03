@@ -10,7 +10,6 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: openai==1.92.1
 Requires-Dist: networkx==3.4.2
-Requires-Dist: python_igraph==0.11.8
 Requires-Dist: tiktoken==0.7.0
 Requires-Dist: pydantic==2.10.4
 Requires-Dist: tenacity==8.5.0
@@ -18,6 +17,8 @@ Requires-Dist: einops
 Requires-Dist: tqdm
 Requires-Dist: boto3
 Requires-Dist: filelock
+Requires-Dist: psycopg2-binary>=2.9.0
+Requires-Dist: pydgraph>=25.0.0
 Dynamic: author
 Dynamic: author-email
 Dynamic: description
@@ -69,6 +70,10 @@ categories, bringing it one step closer to true long-term memory.
 ----
 
 ## Installation
+
+**Requirements:** This streamlined build requires:
+- **DGraph** (graph storage) – run a DGraph instance (e.g. `localhost:9080`)
+- **PostgreSQL with pgvector** (embedding storage)
 
 ```sh
 conda create -n hipporag python=3.10

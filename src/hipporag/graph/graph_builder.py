@@ -1,7 +1,6 @@
 import logging
 from collections import defaultdict
 from typing import List, Tuple, Dict
-import igraph as ig
 
 from ..embedding_store import EmbeddingStore
 
@@ -14,7 +13,7 @@ class GraphBuilder:
     """
     
     def __init__(self,
-                 graph: ig.Graph,
+                 graph,
                  entity_embedding_store: EmbeddingStore,
                  chunk_embedding_store: EmbeddingStore,
                  node_to_node_stats: Dict):
@@ -41,7 +40,7 @@ class GraphBuilder:
         embedding store. The method checks attributes and ensures no duplicates are added.
         New nodes are prepared and added in bulk to optimize graph updates.
         """
-        existing_nodes = {v["name"]: v for v in self.graph.vs if "name" in v.attributes()}
+        existing_nodes = {v["name"]: v for v in self.graph.get_vertices() if hasattr(v, "attributes") and "name" in v.attributes()}
 
         entity_to_row = self.entity_embedding_store.get_all_id_to_rows()
         passage_to_row = self.chunk_embedding_store.get_all_id_to_rows()
@@ -59,7 +58,7 @@ class GraphBuilder:
                     new_nodes[k].append(v)
 
         if len(new_nodes) > 0:
-            self.graph.add_vertices(n=len(next(iter(new_nodes.values()))), attributes=new_nodes)
+            self.graph.add_vertices(len(next(iter(new_nodes.values()))), attributes=new_nodes)
     
     def add_new_edges(self):
         """
@@ -84,7 +83,7 @@ class GraphBuilder:
             })
 
         valid_edges, valid_weights = [], {"weight": []}
-        current_node_ids = set(self.graph.vs["name"])
+        current_node_ids = set(self.graph.get_vertex_attributes("name"))
         for source_node_id, target_node_id, edge_d in zip(edge_source_node_keys, edge_target_node_keys, edge_metadata):
             if source_node_id in current_node_ids and target_node_id in current_node_ids:
                 valid_edges.append((source_node_id, target_node_id))
@@ -118,8 +117,8 @@ class GraphBuilder:
         """
         from ..utils.misc_utils import compute_mdhash_id
         
-        if "name" in self.graph.vs:
-            current_graph_nodes = set(self.graph.vs["name"])
+        if self.graph.vcount() > 0:
+            current_graph_nodes = set(self.graph.get_vertex_attributes("name"))
         else:
             current_graph_nodes = set()
 
@@ -169,8 +168,8 @@ class GraphBuilder:
         """
         from ..utils.misc_utils import compute_mdhash_id
         
-        if "name" in self.graph.vs.attribute_names():
-            current_graph_nodes = set(self.graph.vs["name"])
+        if self.graph.vcount() > 0:
+            current_graph_nodes = set(self.graph.get_vertex_attributes("name"))
         else:
             current_graph_nodes = set()
 

@@ -40,6 +40,10 @@ categories, bringing it one step closer to true long-term memory.
 
 ## Installation
 
+**Requirements:** This streamlined build requires:
+- **DGraph** (graph storage) – run a DGraph instance (e.g. `localhost:9080`)
+- **PostgreSQL with pgvector** (embedding storage)
+
 ```sh
 conda create -n hipporag python=3.10
 conda activate hipporag
