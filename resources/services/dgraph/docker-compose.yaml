@@ -1,0 +1,21 @@
+
+version: "3.7"
+services:
+  dgraph:
+    image: dgraph/standalone:v24.1.4
+    restart: always
+    ports:
+      - 18081:8080
+      - 19081:9080
+    networks:
+      - my_shared_network
+  ratel:
+      image: dgraph/ratel:v25.0.0
+      ports:
+        - 18082:8000
+
+
+networks:
+  my_shared_network:
+    external: true
+
