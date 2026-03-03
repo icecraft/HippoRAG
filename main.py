@@ -2,6 +2,12 @@ import os
 from typing import List
 import json
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from src.hipporag.HippoRAG import HippoRAG
 from src.hipporag.utils.misc_utils import string_to_bool
 from src.hipporag.utils.config_utils import BaseConfig
@@ -9,7 +15,6 @@ from src.hipporag.utils.config_utils import BaseConfig
 import argparse
 
 # os.environ["LOG_LEVEL"] = "DEBUG"
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import logging
@@ -69,21 +74,26 @@ def get_gold_answers(samples):
 def main():
     parser = argparse.ArgumentParser(description="HippoRAG retrieval and QA")
     parser.add_argument('--dataset', type=str, default='musique', help='Dataset name')
-    parser.add_argument('--llm_base_url', type=str, default='https://api.openai.com/v1', help='LLM base URL')
-    parser.add_argument('--llm_name', type=str, default='gpt-4o-mini', help='LLM name')
-    parser.add_argument('--embedding_name', type=str, default='text-embedding-3-small', help='embedding model name (OpenAI or Cohere)')
+    parser.add_argument('--llm_base_url', type=str, default=None, help='LLM base URL (overrides env)')
+    parser.add_argument('--llm_name', type=str, default=None, help='LLM name (overrides env)')
+    parser.add_argument('--embedding_name', type=str, default=None, help='embedding model name (overrides env)')
     parser.add_argument('--force_index_from_scratch', type=str, default='false',
                         help='If set to True, will ignore all existing storage files and graph data and will rebuild from scratch.')
     parser.add_argument('--force_openie_from_scratch', type=str, default='false', help='If set to False, will try to first reuse openie results for the corpus if they exist.')
     parser.add_argument('--openie_mode', choices=['online'], default='online',
                         help="OpenIE mode. Only 'online' mode is supported (uses OpenAI API).")
-    parser.add_argument('--save_dir', type=str, default='outputs', help='Save directory')
+    parser.add_argument('--save_dir', type=str, default=None, help='Save directory')
     args = parser.parse_args()
 
     dataset_name = args.dataset
-    save_dir = args.save_dir
-    llm_base_url = args.llm_base_url
-    llm_name = args.llm_name
+
+    # Read configuration from environment variables first, then command line args
+    unified_base_url = os.getenv("OPENAI_BASE_URL")
+    llm_base_url = args.llm_base_url or os.getenv("HIPPORAG_LLM_BASE_URL") or unified_base_url or 'https://api.openai.com/v1'
+    llm_name = args.llm_name or os.getenv("HIPPORAG_LLM_MODEL", "gpt-4o-mini")
+    embedding_name = args.embedding_name or os.getenv("HIPPORAG_EMBEDDING_MODEL", "text-embedding-3-small")
+    save_dir = args.save_dir or os.getenv("HIPPORAG_SAVE_DIR", "outputs")
+
     if save_dir == 'outputs':
         save_dir = save_dir + '/' + dataset_name
     else:
@@ -109,12 +119,20 @@ def main():
     except:
         gold_docs = None
 
+    # Parse DGraph connection from environment variable
+    dgraph_grpc = os.getenv("DGRAPH_GRPC", "localhost:9080")
+    dgraph_host, dgraph_port = dgraph_grpc.rsplit(":", 1)
+    dgraph_config = {
+        "host": dgraph_host,
+        "port": int(dgraph_port)
+    }
+
     config = BaseConfig(
         save_dir=save_dir,
         llm_base_url=llm_base_url,
         llm_name=llm_name,
         dataset=dataset_name,
-        embedding_model_name=args.embedding_name,
+        embedding_model_name=embedding_name,
         force_index_from_scratch=force_index_from_scratch,  # ignore previously stored index, set it to False if you want to use the previously stored index and embeddings
         force_openie_from_scratch=force_openie_from_scratch,
         rerank_dspy_file_path="src/hipporag/prompts/dspy_prompts/filter_llama3.3-70B-Instruct.json",
@@ -126,7 +144,16 @@ def main():
         embedding_batch_size=8,
         max_new_tokens=None,
         corpus_len=len(corpus),
-        openie_mode=args.openie_mode
+        openie_mode=args.openie_mode,
+        graph_library="dgraph",
+        dgraph_config=dgraph_config,
+        # pgvector configuration from environment variables
+        use_pgvector=os.getenv("USE_PGVECTOR", "true").lower() == "true",
+        pgvector_host=os.getenv("PGVECTOR_HOST", "localhost"),
+        pgvector_port=int(os.getenv("PGVECTOR_PORT", "5432")),
+        pgvector_database=os.getenv("PGVECTOR_DATABASE", "hipporag"),
+        pgvector_user=os.getenv("PGVECTOR_USER", "postgres"),
+        pgvector_password=os.getenv("PGVECTOR_PASSWORD", ""),
     )
 
     logging.basicConfig(level=logging.INFO)

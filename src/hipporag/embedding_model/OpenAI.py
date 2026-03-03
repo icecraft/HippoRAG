@@ -47,7 +47,6 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
                 "pretrained_model_name_or_path": self.embedding_model_name,
                 "trust_remote_code": True,
                 # "torch_dtype": "auto",
-                'device_map': "auto",  # added this line to use multiple GPUs
                 # **kwargs
             },
             "encode_params": {

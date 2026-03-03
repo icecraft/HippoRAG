@@ -13,6 +13,12 @@ src/hipporag.egg-info/SOURCES.txt
 src/hipporag.egg-info/dependency_links.txt
 src/hipporag.egg-info/requires.txt
 src/hipporag.egg-info/top_level.txt
+src/hipporag/api/__init__.py
+src/hipporag/api/__main__.py
+src/hipporag/api/app.py
+src/hipporag/api/dependencies.py
+src/hipporag/api/models.py
+src/hipporag/api/routes.py
 src/hipporag/embedding_model/OpenAI.py
 src/hipporag/embedding_model/__init__.py
 src/hipporag/embedding_model/base.py

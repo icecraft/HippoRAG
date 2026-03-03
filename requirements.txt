@@ -1,10 +1,11 @@
 openai==1.92.1
 networkx==3.4.2
-pydantic==2.10.4
+pydantic>=2.11.0
 tenacity==8.5.0
 tiktoken==0.7.0
 nest_asyncio
 numpy
+pandas
 scipy
 tqdm
 einops
@@ -13,3 +14,5 @@ filelock
 python-dotenv
 psycopg2-binary>=2.9.0
 pydgraph>=25.0.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
