@@ -5,11 +5,13 @@
 ## 文档索引
 
 ### 快速开始
+- [快速开始指南](./QUICKSTART.md) - 5 分钟快速上手
 - [集成指南](./INTEGRATION_GUIDE.md) - 第三方系统集成 HippoRAG 的完整指南
 - [DGraph 支持说明](./dgraph_support.md) - 精简版图存储（DGraph）和向量存储（pgvector）配置
 
 ### 核心文档
-- [API 参考文档](./API_REFERENCE.md) - 详细的 API 接口文档
+- [REST API 文档](./REST_API.md) - RESTful API 接口文档
+- [API 参考文档](./API_REFERENCE.md) - 详细的 Python API 接口文档
 - [配置指南](./CONFIGURATION.md) - 配置参数详细说明
 - [架构概述](./ARCHITECTURE.md) - 系统架构和设计原理
 - [部署指南](./DEPLOYMENT.md) - 生产环境部署指南
@@ -20,8 +22,9 @@
 
 | 需求 | 推荐文档 |
 |------|----------|
-| 快速上手 | [集成指南 - 快速开始](./INTEGRATION_GUIDE.md#快速开始) |
-| 了解 API | [API 参考文档](./API_REFERENCE.md#hipporag-类) |
+| 快速上手 | [快速开始指南](./QUICKSTART.md) |
+| 使用 REST API | [REST API 文档](./REST_API.md) |
+| 了解 Python API | [API 参考文档](./API_REFERENCE.md#hipporag-类) |
 | 配置参数 | [配置指南](./CONFIGURATION.md#配置概述) |
 | 部署到生产 | [部署指南](./DEPLOYMENT.md#系统要求) |
 | 理解架构 | [架构概述](./ARCHITECTURE.md#架构概述) |
