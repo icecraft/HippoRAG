@@ -24,3 +24,5 @@ clear_outputs_and_logs.sh
 
 # 
 build/
+
+*.egg-info
