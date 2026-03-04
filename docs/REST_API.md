@@ -171,6 +171,301 @@ DPR 检索 + LLM 问答。
 
 ---
 
+## 多租户端点（Multi-Tenancy）
+
+多租户功能支持按书籍（Book）维度索引数据，按业务（Business）维度查询。
+
+### 核心概念
+
+| 概念 | 说明 |
+|------|------|
+| `book_id` | 书籍标识，数据隔离的最小单元，索引一次，可被多个业务共享 |
+| `business_id` | 业务标识，代表一个租户，可访问绑定的多本书 |
+
+### 书籍索引
+
+#### `POST /book/index/sync`
+同步索引文档到指定书籍。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/book/index/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "book_id": "novel_001",
+    "docs": [
+      "方源一身残破的碧绿大袍，披头散发，浑身浴血。",
+      "就这样紧张地对峙了三个时辰，夕阳西下。"
+    ]
+  }'
+```
+
+**响应：**
+```json
+{
+  "status": "completed",
+  "message": "Successfully indexed 2 documents",
+  "book_id": "novel_001",
+  "num_docs": 2
+}
+```
+
+### 书籍管理
+
+#### `GET /books`
+列出所有书籍。
+
+**响应：**
+```json
+{
+  "books": [
+    {
+      "book_id": "novel_001",
+      "doc_count": 100,
+      "status": "ready",
+      "created_at": "2026-03-04T10:00:00Z",
+      "updated_at": "2026-03-04T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### `DELETE /book?book_id={book_id}`
+删除书籍及其所有数据。
+
+**响应：**
+```json
+{
+  "status": "completed",
+  "message": "Book novel_001 deleted"
+}
+```
+
+### 业务绑定
+
+#### `POST /business/bind`
+将书籍绑定到业务。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/business/bind \
+  -H "Content-Type: application/json" \
+  -d '{
+    "business_id": "company_001",
+    "book_ids": ["novel_001", "novel_002"]
+  }'
+```
+
+**响应：**
+```json
+{
+  "status": "completed",
+  "message": "Successfully bound 2 books to business",
+  "business_id": "company_001",
+  "book_ids": ["novel_001", "novel_002"]
+}
+```
+
+#### `POST /business/unbind`
+解除书籍与业务的绑定。
+
+**请求：**
+```json
+{
+  "business_id": "company_001",
+  "book_ids": ["novel_002"]
+}
+```
+
+#### `GET /business/books?business_id={business_id}`
+列出业务绑定的所有书籍。
+
+**响应：**
+```json
+{
+  "business_id": "company_001",
+  "books": [
+    {
+      "book_id": "novel_001",
+      "doc_count": 100,
+      "status": "ready",
+      "created_at": "2026-03-04T10:00:00Z",
+      "updated_at": "2026-03-04T10:00:00Z"
+    }
+  ]
+}
+```
+
+### 业务查询
+
+#### `POST /business/qa`
+按业务维度进行问答（搜索该业务绑定的所有书籍）。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/business/qa \
+  -H "Content-Type: application/json" \
+  -d '{
+    "business_id": "company_001",
+    "queries": ["方源穿的是什么颜色的袍子？"]
+  }'
+```
+
+**响应：**
+```json
+{
+  "results": [
+    {
+      "query": "方源穿的是什么颜色的袍子？",
+      "answer": "碧绿",
+      "passages": [
+        {"content": "方源一身残破的碧绿大袍...", "doc_id": null, "book_id": "novel_001"}
+      ],
+      "book_id": "novel_001"
+    }
+  ],
+  "business_id": "company_001",
+  "books_searched": ["novel_001", "novel_002"]
+}
+```
+
+#### `POST /business/retrieve`
+按业务维度进行检索。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/business/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "business_id": "company_001",
+    "queries": ["方源的特点"],
+    "num_to_retrieve": 10,
+    "return_scores": true
+  }'
+```
+
+**响应：**
+```json
+{
+  "results": [
+    {
+      "query": "方源的特点",
+      "passages": [
+        {"content": "方源一身残破的碧绿大袍...", "doc_id": null, "book_id": "novel_001"}
+      ],
+      "scores": [0.85]
+    }
+  ],
+  "business_id": "company_001",
+  "books_searched": ["novel_001", "novel_002"]
+}
+```
+
+---
+
+## 多租户完整示例
+
+### Python 示例
+
+```python
+import requests
+
+API_URL = "http://localhost:8000"
+
+# 1. 索引多本书籍
+print("=== 索引书籍 ===")
+books = {
+    "novel_001": ["方源一身残破的碧绿大袍，披头散发，浑身浴血。"],
+    "novel_002": ["张三穿着一件红色的长袍，站在城门口。"],
+    "novel_003": ["李四穿着蓝色的衣服，坐在茶馆里。"]
+}
+
+for book_id, docs in books.items():
+    response = requests.post(f"{API_URL}/book/index/sync", json={
+        "book_id": book_id,
+        "docs": docs
+    })
+    print(f"  {book_id}: {response.json()['status']}")
+
+# 2. 绑定书籍到业务
+print("\n=== 绑定业务 ===")
+# Business A 可以访问 novel_001 和 novel_002
+requests.post(f"{API_URL}/business/bind", json={
+    "business_id": "business_a",
+    "book_ids": ["novel_001", "novel_002"]
+})
+print("  Business A: novel_001, novel_002")
+
+# Business B 可以访问 novel_002 和 novel_003
+requests.post(f"{API_URL}/business/bind", json={
+    "business_id": "business_b",
+    "book_ids": ["novel_002", "novel_003"]
+})
+print("  Business B: novel_002, novel_003")
+
+# 3. 业务查询（验证数据隔离）
+print("\n=== 业务查询测试 ===")
+query = "方源穿的是什么颜色的袍子？"
+
+# Business A 查询（能找到方源的信息）
+response = requests.post(f"{API_URL}/business/qa", json={
+    "business_id": "business_a",
+    "queries": [query]
+})
+result = response.json()
+print(f"  Business A: {result['results'][0]['answer']}")
+
+# Business B 查询（找不到方源的信息，因为 novel_001 未绑定）
+response = requests.post(f"{API_URL}/business/qa", json={
+    "business_id": "business_b",
+    "queries": [query]
+})
+result = response.json()
+print(f"  Business B: {result['results'][0]['answer']}")
+```
+
+**输出：**
+```
+=== 索引书籍 ===
+  novel_001: completed
+  novel_002: completed
+  novel_003: completed
+
+=== 绑定业务 ===
+  Business A: novel_001, novel_002
+  Business B: novel_002, novel_003
+
+=== 业务查询测试 ===
+  Business A: 碧绿 (green)
+  Business B: 没有找到关于方源的信息
+```
+
+---
+
+## API 端点汇总
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/health` | 健康检查 |
+| GET | `/status` | 索引进度 |
+| POST | `/index` | 异步索引文档 |
+| POST | `/index/sync` | 同步索引文档 |
+| POST | `/retrieve` | HippoRAG 图检索 |
+| POST | `/retrieve/dpr` | DPR 向量检索 |
+| POST | `/qa` | HippoRAG 问答 |
+| POST | `/qa/dpr` | DPR 问答 |
+| **多租户** | | |
+| POST | `/book/index/sync` | 按书籍索引文档 |
+| GET | `/books` | 列出所有书籍 |
+| DELETE | `/book` | 删除书籍 |
+| POST | `/business/bind` | 绑定书籍到业务 |
+| POST | `/business/unbind` | 解除绑定 |
+| GET | `/business/books` | 列出业务书籍 |
+| POST | `/business/qa` | 按业务问答 |
+| POST | `/business/retrieve` | 按业务检索 |
+
+---
+
 ## 完整使用示例
 
 ### Python 完整示例
@@ -329,3 +624,4 @@ python projects/query_via_api.py --query "问题" --api_url http://localhost:800
 - [集成指南](./INTEGRATION_GUIDE.md)
 - [API 参考文档](./API_REFERENCE.md)
 - [部署指南](./DEPLOYMENT.md)
+- [多租户设计文档](./MULTI_TENANCY_DESIGN.md)
