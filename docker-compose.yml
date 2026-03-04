@@ -1,59 +1,13 @@
 # HippoRAG Docker Compose
 # Usage:
-#   docker-compose up -d          # Start all services
-#   docker-compose up -d api      # Start only API (depends on db and dgraph)
+#   docker-compose up -d          # Start API service
 #   docker-compose logs -f api    # View API logs
-#   docker-compose down           # Stop all services
+#   docker-compose down           # Stop API service
+#
+# Note: DGraph and pgvector are external services.
+# Make sure they are running and accessible before starting the API.
 
 services:
-  # PostgreSQL with pgvector extension
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: hipporag-db
-    environment:
-      POSTGRES_USER: ${PGVECTOR_USER:-hipporag}
-      POSTGRES_PASSWORD: ${PGVECTOR_PASSWORD:-hipporag}
-      POSTGRES_DB: ${PGVECTOR_DATABASE:-hipporag}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "${PGVECTOR_PORT:-5432}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PGVECTOR_USER:-hipporag}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - hipporag-network
-
-  # DGraph zero (controller)
-  dgraph-zero:
-    image: dgraph/dgraph:latest
-    container_name: hipporag-dgraph-zero
-    command: dgraph zero --my=dgraph-zero:5080
-    volumes:
-      - dgraph-zero:/dgraph
-    ports:
-      - "${DGRAPH_ZERO_PORT:-5080}:5080"
-      - "${DGRAPH_ZERO_GRPC:-6080}:6080"
-    networks:
-      - hipporag-network
-
-  # DGraph alpha (database)
-  dgraph:
-    image: dgraph/dgraph:latest
-    container_name: hipporag-dgraph
-    command: dgraph alpha --my=dgraph:7080 --zero=dgraph-zero:5080 --security whitelist=0.0.0.0/0
-    volumes:
-      - dgraph-alpha:/dgraph
-    ports:
-      - "${DGRAPH_ALPHA_PORT:-8080}:8080"
-      - "${DGRAPH_ALPHA_GRPC:-9080}:9080"
-    depends_on:
-      - dgraph-zero
-    networks:
-      - hipporag-network
-
   # HippoRAG REST API
   api:
     build:
@@ -67,13 +21,13 @@ services:
       HIPPORAG_LLM_MODEL: ${HIPPORAG_LLM_MODEL:-gpt-4o-mini}
       HIPPORAG_EMBEDDING_MODEL: ${HIPPORAG_EMBEDDING_MODEL:-text-embedding-3-small}
 
-      # DGraph configuration (use container service name)
-      DGRAPH_GRPC: dgraph:9080
+      # DGraph configuration (external service)
+      DGRAPH_GRPC: ${DGRAPH_GRPC:-localhost:9080}
 
-      # pgvector configuration (use container service name)
-      USE_PGVECTOR: "true"
-      PGVECTOR_HOST: db
-      PGVECTOR_PORT: 5432
+      # pgvector configuration (external service)
+      USE_PGVECTOR: ${USE_PGVECTOR:-true}
+      PGVECTOR_HOST: ${PGVECTOR_HOST:-localhost}
+      PGVECTOR_PORT: ${PGVECTOR_PORT:-5432}
       PGVECTOR_DATABASE: ${PGVECTOR_DATABASE:-hipporag}
       PGVECTOR_USER: ${PGVECTOR_USER:-hipporag}
       PGVECTOR_PASSWORD: ${PGVECTOR_PASSWORD:-hipporag}
@@ -85,25 +39,12 @@ services:
       HIPPORAG_SAVE_DIR: /app/outputs
     ports:
       - "${API_PORT:-8000}:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      dgraph:
-        condition: service_started
     volumes:
       - ./outputs:/app/outputs
     networks:
-      - hipporag-network
+      - my-shared-network
     restart: unless-stopped
 
-volumes:
-  pgdata:
-    driver: local
-  dgraph-zero:
-    driver: local
-  dgraph-alpha:
-    driver: local
-
 networks:
-  hipporag-network:
-    driver: bridge
+  my-shared-network:
+    external: true
