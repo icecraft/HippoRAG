@@ -46,6 +46,7 @@ uvicorn hipporag.api:app --host 0.0.0.0 --port 8000
 
 ```bash
 curl http://localhost:8000/health
+# {"status": "healthy", "hipporag_initialized": true, "indexing_status": "idle"}
 ```
 
 ---
@@ -54,13 +55,10 @@ curl http://localhost:8000/health
 
 ### 基础端点
 
-#### `GET /`
-获取 API 基本信息。
-
 #### `GET /health`
 健康检查。
 
-**响应示例：**
+**测试响应：**
 ```json
 {
   "status": "healthy",
@@ -76,43 +74,64 @@ curl http://localhost:8000/health
 
 ### 索引端点
 
-#### `POST /index`
-异步索引文档（立即返回，后台处理）。
-
-**请求：**
-```json
-{
-  "docs": ["文档1", "文档2"]
-}
-```
-
-**响应：**
-```json
-{
-  "status": "accepted",
-  "message": "Started indexing 2 documents in background",
-  "num_docs": 2
-}
-```
-
 #### `POST /index/sync`
 同步索引文档（等待完成）。
 
-**请求：**
-```json
-{
-  "docs": ["文档1", "文档2"]
-}
+**测试请求：**
+```bash
+curl -X POST http://localhost:8000/index/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "docs": ["方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周。山风吹得血袍飘荡，如战旗般嚯嚯作响。就这样紧张地对峙了三个时辰，夕阳西下。他本是地球上的华夏学子，机缘巧合穿越到这方世界。"]
+  }'
 ```
 
-**响应：**
+**测试响应：**
 ```json
 {
   "status": "completed",
-  "message": "Successfully indexed 2 documents",
-  "num_docs": 2
+  "message": "Successfully indexed 1 documents",
+  "num_docs": 1
 }
 ```
+
+---
+
+### 问答端点
+
+#### `POST /qa`
+HippoRAG 图检索 + LLM 问答。
+
+**测试请求：**
+```bash
+curl -X POST http://localhost:8000/qa \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["方源身上穿的是什么颜色的袍子？"], "num_to_retrieve": 3}'
+```
+
+**测试响应：**
+```json
+{
+  "results": [
+    {
+      "query": "方源身上穿的是什么颜色的袍子？",
+      "answer": "碧绿 (green)",
+      "passages": [
+        {"content": "方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周...", "doc_id": null}
+      ]
+    }
+  ],
+  "metrics": null
+}
+```
+
+**更多测试示例：**
+
+| 问题 | 答案 | 来源 |
+|------|------|------|
+| 方源身上穿的是什么颜色的袍子？ | **碧绿 (green)** | "方源一身残破的**碧绿**大袍" |
+| 方源被困了多长时间？ | **三个时辰** | "就这样紧张地对峙了**三个时辰**" |
+| 方源来自哪里？ | **Earth** | "他本是**地球**上的华夏学子" |
 
 ---
 
@@ -121,25 +140,23 @@ curl http://localhost:8000/health
 #### `POST /retrieve`
 HippoRAG 图检索（多跳推理）。
 
-**请求：**
-```json
-{
-  "queries": ["查询问题"],
-  "num_to_retrieve": 10,
-  "return_scores": true
-}
+**测试请求：**
+```bash
+curl -X POST http://localhost:8000/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["方源的特点"], "num_to_retrieve": 5, "return_scores": true}'
 ```
 
-**响应：**
+**测试响应：**
 ```json
 {
   "results": [
     {
-      "query": "查询问题",
+      "query": "方源的特点",
       "passages": [
-        {"content": "相关段落...", "doc_id": null}
+        {"content": "方源一身残破的碧绿大袍，披头散发，浑身浴血...", "doc_id": null}
       ],
-      "scores": [0.95]
+      "scores": [0.85]
     }
   ],
   "metrics": null
@@ -149,92 +166,98 @@ HippoRAG 图检索（多跳推理）。
 #### `POST /retrieve/dpr`
 标准 DPR 检索（向量相似度）。
 
----
-
-### 问答端点
-
-#### `POST /qa`
-HippoRAG 图检索 + LLM 问答。
-
-**请求：**
-```json
-{
-  "queries": ["问题"],
-  "num_to_retrieve": 5
-}
-```
-
-**响应：**
-```json
-{
-  "results": [
-    {
-      "query": "问题",
-      "answer": "生成的答案...",
-      "passages": [
-        {"content": "支持段落...", "doc_id": null}
-      ]
-    }
-  ],
-  "metrics": null
-}
-```
-
 #### `POST /qa/dpr`
 DPR 检索 + LLM 问答。
 
 ---
 
-## 使用示例
+## 完整使用示例
 
-### cURL
-
-```bash
-# 索引
-curl -X POST http://localhost:8000/index/sync \
-  -H "Content-Type: application/json" \
-  -d '{"docs": ["Python 是编程语言", "Python 由 Guido 创建"]}'
-
-# 问答
-curl -X POST http://localhost:8000/qa \
-  -H "Content-Type: application/json" \
-  -d '{"queries": ["Python 是谁创建的？"]}'
-
-# 检索
-curl -X POST http://localhost:8000/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{"queries": ["Python 用途"], "num_to_retrieve": 5}'
-```
-
-### Python
+### Python 完整示例
 
 ```python
 import requests
 
 API_URL = "http://localhost:8000"
 
-# 索引文档
-requests.post(f"{API_URL}/index/sync", json={
-    "docs": ["文档内容"]
-})
+# 1. 索引文档
+print("=== 索引文档 ===")
+docs = [
+    "方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周。",
+    "就这样紧张地对峙了三个时辰，夕阳西下。",
+    "他本是地球上的华夏学子，机缘巧合穿越到这方世界。"
+]
+response = requests.post(f"{API_URL}/index/sync", json={"docs": docs})
+print(f"状态: {response.json()['status']}")
+print(f"消息: {response.json()['message']}")
+# 输出: 状态: completed
+#       消息: Successfully indexed 3 documents
 
-# 问答
-response = requests.post(f"{API_URL}/qa", json={
-    "queries": ["问题"]
-})
-result = response.json()
-print(result["results"][0]["answer"])
+# 2. 问答
+print("\n=== 问答测试 ===")
+questions = [
+    "方源身上穿的是什么颜色的袍子？",
+    "方源被困了多长时间？",
+    "方源来自哪里？"
+]
+for q in questions:
+    response = requests.post(f"{API_URL}/qa", json={"queries": [q], "num_to_retrieve": 3})
+    result = response.json()
+    print(f"Q: {q}")
+    print(f"A: {result['results'][0]['answer']}")
+    print()
 
-# 检索
+# 3. 检索
+print("=== 检索测试 ===")
 response = requests.post(f"{API_URL}/retrieve", json={
-    "queries": ["查询"],
-    "num_to_retrieve": 5
+    "queries": ["方源的外貌"],
+    "num_to_retrieve": 3,
+    "return_scores": True
 })
-for passage in response.json()["results"][0]["passages"]:
-    print(passage["content"])
+for i, p in enumerate(response.json()["results"][0]["passages"], 1):
+    print(f"[{i}] {p['content'][:50]}...")
 ```
 
-### JavaScript
+**输出：**
+```
+=== 索引文档 ===
+状态: completed
+消息: Successfully indexed 3 documents
+
+=== 问答测试 ===
+Q: 方源身上穿的是什么颜色的袍子？
+A: 碧绿 (green)
+
+Q: 方源被困了多长时间？
+A: 三个时辰
+
+Q: 方源来自哪里？
+A: Earth
+
+=== 检索测试 ===
+[1] 方源一身残破的碧绿大袍，披头散发，浑身浴血...
+```
+
+### cURL 完整示例
+
+```bash
+# 索引
+curl -X POST http://localhost:8000/index/sync \
+  -H "Content-Type: application/json" \
+  -d '{"docs": ["文档内容"]}'
+
+# 问答
+curl -X POST http://localhost:8000/qa \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["问题"], "num_to_retrieve": 5}'
+
+# 检索
+curl -X POST http://localhost:8000/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["查询"], "num_to_retrieve": 5, "return_scores": true}'
+```
+
+### JavaScript 示例
 
 ```javascript
 const API_URL = 'http://localhost:8000';
