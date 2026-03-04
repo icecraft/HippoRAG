@@ -206,5 +206,6 @@ def create_embedding_store(embedding_model, config, namespace: str):
         namespace=namespace,
         index_type=config.pgvector_index_type,
         index_lists=config.pgvector_index_lists,
-        force_index_from_scratch=config.force_index_from_scratch
+        force_index_from_scratch=config.force_index_from_scratch,
+        book_id=getattr(config, 'book_id', None)
     )

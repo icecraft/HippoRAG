@@ -14,10 +14,17 @@ from .models import (
     RetrieveRequest, RetrieveResponse, QueryResult, Passage,
     QARequest, QAResponse, QAResult,
     DPRRequest, DPRQARequest,
-    HealthResponse, StatusResponse
+    HealthResponse, StatusResponse,
+    # Multi-tenancy models
+    BookIndexRequest, BookIndexResponse, BookInfo, BooksListResponse,
+    BusinessBindRequest, BusinessBindResponse, BusinessUnbindRequest,
+    BusinessBooksResponse, BusinessQARequest, BusinessQAResponse, BusinessQAResult,
+    BusinessRetrieveRequest, BusinessRetrieveResponse, BusinessPassage,
+    BusinessQueryResult, BookDeleteResponse
 )
 from .dependencies import (
-    get_hipporag, get_indexing_status, set_indexing_status, is_hipporag_initialized
+    get_hipporag, get_indexing_status, set_indexing_status, is_hipporag_initialized,
+    get_multi_tenancy_manager, is_multi_tenancy_initialized
 )
 
 logger = logging.getLogger(__name__)
@@ -357,3 +364,269 @@ async def question_answering_dpr(request: DPRQARequest):
     except Exception as e:
         logger.error(f"DPR QA failed: {e}")
         raise HTTPException(status_code=500, detail=f"DPR QA failed: {str(e)}")
+
+
+# ============== Multi-Tenancy: Book Endpoints ==============
+
+@router.post("/book/index/sync", response_model=BookIndexResponse, tags=["Book Indexing"])
+async def index_book_sync(request: BookIndexRequest):
+    """
+    Index documents into a specific book (synchronous).
+
+    This endpoint indexes documents into the specified book and waits for completion.
+    Each book is an independent data unit that can be shared across multiple businesses.
+    """
+    if not request.docs:
+        raise HTTPException(status_code=400, detail="No documents provided")
+
+    if not request.book_id:
+        raise HTTPException(status_code=400, detail="book_id is required")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.index_book(request.book_id, request.docs)
+
+        if result['status'] == 'failed':
+            raise HTTPException(status_code=500, detail=result['message'])
+
+        return BookIndexResponse(
+            status=result['status'],
+            message=result['message'],
+            book_id=result['book_id'],
+            num_docs=result['num_docs']
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Book indexing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Book indexing failed: {str(e)}")
+
+
+@router.get("/books", response_model=BooksListResponse, tags=["Book Management"])
+async def list_books():
+    """
+    List all books in the system.
+
+    Returns metadata for all books including document counts and status.
+    """
+    try:
+        manager = get_multi_tenancy_manager()
+        books = manager.list_books()
+        return BooksListResponse(
+            books=[BookInfo(**book) for book in books]
+        )
+    except Exception as e:
+        logger.error(f"Failed to list books: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list books: {str(e)}")
+
+
+@router.delete("/book", response_model=BookDeleteResponse, tags=["Book Management"])
+async def delete_book(book_id: str):
+    """
+    Delete a book and all its data.
+
+    This removes the book, its embeddings, graph data, and all business bindings.
+    This operation cannot be undone.
+    """
+    if not book_id:
+        raise HTTPException(status_code=400, detail="book_id is required")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.delete_book(book_id)
+
+        if result['status'] == 'not_found':
+            raise HTTPException(status_code=404, detail=result['message'])
+
+        return BookDeleteResponse(
+            status=result['status'],
+            message=result['message']
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete book: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete book: {str(e)}")
+
+
+# ============== Multi-Tenancy: Business Binding Endpoints ==============
+
+@router.post("/business/bind", response_model=BusinessBindResponse, tags=["Business Management"])
+async def bind_books_to_business(request: BusinessBindRequest):
+    """
+    Bind books to a business.
+
+    This creates a many-to-many relationship between businesses and books.
+    A business can access all books bound to it for queries.
+    """
+    if not request.business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+
+    if not request.book_ids:
+        raise HTTPException(status_code=400, detail="book_ids is required")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.bind_books(request.business_id, request.book_ids)
+
+        if result['status'] == 'failed':
+            raise HTTPException(status_code=500, detail=result['message'])
+
+        return BusinessBindResponse(
+            status=result['status'],
+            message=result['message'],
+            business_id=result['business_id'],
+            book_ids=result['book_ids']
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bind books: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to bind books: {str(e)}")
+
+
+@router.post("/business/unbind", response_model=BusinessBindResponse, tags=["Business Management"])
+async def unbind_books_from_business(request: BusinessUnbindRequest):
+    """
+    Unbind books from a business.
+
+    This removes the relationship between a business and specified books.
+    The books themselves are not deleted.
+    """
+    if not request.business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+
+    if not request.book_ids:
+        raise HTTPException(status_code=400, detail="book_ids is required")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.unbind_books(request.business_id, request.book_ids)
+
+        if result['status'] == 'failed':
+            raise HTTPException(status_code=500, detail=result['message'])
+
+        return BusinessBindResponse(
+            status=result['status'],
+            message=result['message'],
+            business_id=result['business_id'],
+            book_ids=[]  # Return empty list for unbind
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to unbind books: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to unbind books: {str(e)}")
+
+
+@router.get("/business/books", response_model=BusinessBooksResponse, tags=["Business Management"])
+async def get_business_books(business_id: str):
+    """
+    List all books bound to a business.
+
+    Returns metadata for all books that the specified business can access.
+    """
+    if not business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.get_business_books(business_id)
+
+        return BusinessBooksResponse(
+            business_id=result['business_id'],
+            books=[BookInfo(**book) for book in result['books']]
+        )
+    except Exception as e:
+        logger.error(f"Failed to get business books: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get business books: {str(e)}")
+
+
+# ============== Multi-Tenancy: Business Query Endpoints ==============
+
+@router.post("/business/retrieve", response_model=BusinessRetrieveResponse, tags=["Business Query"])
+async def retrieve_by_business(request: BusinessRetrieveRequest):
+    """
+    Retrieve passages from all books bound to a business.
+
+    Searches across all books that the business has access to and returns
+    combined results.
+    """
+    if not request.business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+
+    if not request.queries:
+        raise HTTPException(status_code=400, detail="No queries provided")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.retrieve_by_business(
+            business_id=request.business_id,
+            queries=request.queries,
+            num_to_retrieve=request.num_to_retrieve,
+            return_scores=request.return_scores
+        )
+
+        response_results = []
+        for r in result['results']:
+            passages = [
+                BusinessPassage(**p) for p in r['passages']
+            ]
+            response_results.append(BusinessQueryResult(
+                query=r['query'],
+                passages=passages,
+                scores=r.get('scores')
+            ))
+
+        return BusinessRetrieveResponse(
+            results=response_results,
+            business_id=result['business_id'],
+            books_searched=result['books_searched']
+        )
+    except Exception as e:
+        logger.error(f"Business retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Business retrieval failed: {str(e)}")
+
+
+@router.post("/business/qa", response_model=BusinessQAResponse, tags=["Business Query"])
+async def qa_by_business(request: BusinessQARequest):
+    """
+    Answer questions using all books bound to a business.
+
+    Performs retrieval across all accessible books and generates answers
+    using the combined context.
+    """
+    if not request.business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+
+    if not request.queries:
+        raise HTTPException(status_code=400, detail="No queries provided")
+
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.qa_by_business(
+            business_id=request.business_id,
+            queries=request.queries,
+            num_to_retrieve=request.num_to_retrieve
+        )
+
+        response_results = []
+        for r in result['results']:
+            passages = [
+                BusinessPassage(**p) for p in r['passages']
+            ]
+            response_results.append(BusinessQAResult(
+                query=r['query'],
+                answer=r['answer'],
+                passages=passages,
+                book_id=r.get('book_id')
+            ))
+
+        return BusinessQAResponse(
+            results=response_results,
+            business_id=result['business_id'],
+            books_searched=result['books_searched']
+        )
+    except Exception as e:
+        logger.error(f"Business QA failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Business QA failed: {str(e)}")

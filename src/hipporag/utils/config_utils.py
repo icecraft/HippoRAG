@@ -240,6 +240,12 @@ class BaseConfig:
         default=None,
         metadata={"help": "Directory to save all related information. If it's given, will overwrite all default save_dir setups. If it's not given, then if we're not running specific datasets, default to `outputs`, otherwise, default to a dataset-customized output dir."}
     )
+
+    # Multi-tenancy specific attributes
+    book_id: str = field(
+        default=None,
+        metadata={"help": "Book identifier for multi-tenancy, used to filter embeddings by book."}
+    )
     
     
     

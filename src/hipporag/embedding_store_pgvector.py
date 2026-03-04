@@ -17,9 +17,10 @@ class PgVectorEmbeddingStore:
     EmbeddingStore implementation using pgvector for storage and retrieval.
     Provides the same interface as EmbeddingStore but uses PostgreSQL with pgvector extension.
     """
-    
+
     def __init__(self, embedding_model, db_config: Dict, batch_size: int, namespace: str,
-                 index_type: str = "ivfflat", index_lists: int = 100, force_index_from_scratch: bool = False):
+                 index_type: str = "ivfflat", index_lists: int = 100, force_index_from_scratch: bool = False,
+                 book_id: str = None):
         """
         Parameters:
             embedding_model: The embedding model
@@ -33,6 +34,7 @@ class PgVectorEmbeddingStore:
             namespace: Namespace identifier (chunk, entity, fact)
             index_type: Type of vector index ('ivfflat' or 'hnsw')
             index_lists: Number of lists for IVFFlat index (only used when index_type='ivfflat')
+            book_id: Optional book identifier for multi-tenancy data isolation
         """
         self.embedding_model = embedding_model
         self.batch_size = batch_size
@@ -40,6 +42,7 @@ class PgVectorEmbeddingStore:
         self.index_type = index_type
         self.index_lists = index_lists
         self.force_index_from_scratch = force_index_from_scratch
+        self.book_id = book_id
         self.table_name = f"embeddings_{namespace}"
         
         # Get embedding dimension
@@ -115,18 +118,48 @@ class PgVectorEmbeddingStore:
             except Exception as e:
                 logger.warning(f"Could not create vector extension (may already exist): {e}")
                 self.conn.rollback()
-            
-            # Create table
-            cur.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.table_name} (
-                    hash_id TEXT PRIMARY KEY,
-                    content TEXT NOT NULL,
-                    embedding vector({self.embedding_dim}),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
-            self.conn.commit()
-            
+
+            # Check if table exists and its schema
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = %s
+            """, (self.table_name,))
+            existing_columns = [row[0] for row in cur.fetchall()]
+
+            # Create table if not exists
+            if not existing_columns:
+                cur.execute(f"""
+                    CREATE TABLE {self.table_name} (
+                        hash_id TEXT PRIMARY KEY,
+                        content TEXT NOT NULL,
+                        embedding vector({self.embedding_dim}),
+                        book_id VARCHAR(64),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                self.conn.commit()
+                logger.info(f"Created table {self.table_name} with book_id column")
+            elif 'book_id' not in existing_columns:
+                # Add book_id column to existing table
+                try:
+                    cur.execute(f"ALTER TABLE {self.table_name} ADD COLUMN book_id VARCHAR(64);")
+                    self.conn.commit()
+                    logger.info(f"Added book_id column to existing table {self.table_name}")
+                except Exception as e:
+                    logger.warning(f"Could not add book_id column: {e}")
+                    self.conn.rollback()
+
+            # Create index for book_id
+            try:
+                cur.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_{self.table_name}_book_id
+                    ON {self.table_name}(book_id);
+                """)
+                self.conn.commit()
+            except Exception as e:
+                logger.warning(f"Could not create book_id index: {e}")
+                self.conn.rollback()
+
             # Create index for similarity search
             index_name = f"{self.table_name}_embedding_idx"
             try:
@@ -295,23 +328,23 @@ class PgVectorEmbeddingStore:
         try:
             with self.conn.cursor() as cur:
                 data = [
-                    (hash_id, content, embedding.tolist())
+                    (hash_id, content, embedding.tolist(), self.book_id)
                     for hash_id, content, embedding in zip(missing_ids, texts_to_encode, embeddings)
                 ]
                 execute_values(
                     cur,
                     f"""
-                    INSERT INTO {self.table_name} (hash_id, content, embedding)
+                    INSERT INTO {self.table_name} (hash_id, content, embedding, book_id)
                     VALUES %s
                     ON CONFLICT (hash_id) DO NOTHING
                     """,
                     data
                 )
                 self.conn.commit()
-            
+
             # Ensure index exists after insert
             self._ensure_index()
-            
+
             logger.info(f"Inserted {len(missing_ids)} records into {self.table_name}")
         except Exception as e:
             logger.error(f"Error inserting records: {e}")
@@ -377,31 +410,41 @@ class PgVectorEmbeddingStore:
     def similarity_search(self, query_embedding: np.ndarray, top_k: int = 10) -> List[Tuple[str, str, float]]:
         """
         Perform similarity search using pgvector.
-        
+
         Parameters:
             query_embedding: Query embedding vector
             top_k: Number of top results to return
-        
+
         Returns:
             List of (hash_id, content, similarity_score) tuples, sorted by similarity descending
         """
         if not isinstance(query_embedding, np.ndarray):
             query_embedding = np.array(query_embedding)
-        
+
         # Ensure 1D array
         if query_embedding.ndim > 1:
             query_embedding = query_embedding.flatten()
-        
+
         with self.conn.cursor() as cur:
             # Use cosine distance (<=>) and convert to similarity (1 - distance)
             # pgvector's <=> operator returns cosine distance (0 = identical, 2 = opposite)
-            cur.execute(f"""
-                SELECT hash_id, content, 1 - (embedding <=> %s::vector) as similarity
-                FROM {self.table_name}
-                ORDER BY embedding <=> %s::vector
-                LIMIT %s
-            """, (query_embedding.tolist(), query_embedding.tolist(), top_k))
-            
+            if self.book_id:
+                # Filter by book_id for multi-tenancy
+                cur.execute(f"""
+                    SELECT hash_id, content, 1 - (embedding <=> %s::vector) as similarity
+                    FROM {self.table_name}
+                    WHERE book_id = %s
+                    ORDER BY embedding <=> %s::vector
+                    LIMIT %s
+                """, (query_embedding.tolist(), self.book_id, query_embedding.tolist(), top_k))
+            else:
+                cur.execute(f"""
+                    SELECT hash_id, content, 1 - (embedding <=> %s::vector) as similarity
+                    FROM {self.table_name}
+                    ORDER BY embedding <=> %s::vector
+                    LIMIT %s
+                """, (query_embedding.tolist(), query_embedding.tolist(), top_k))
+
             results = cur.fetchall()
             return [(row[0], row[1], float(row[2])) for row in results]
     
@@ -467,7 +510,7 @@ class PgVectorEmbeddingStore:
         """Delete records by hash_ids."""
         if not hash_ids:
             return
-        
+
         try:
             with self.conn.cursor() as cur:
                 placeholders = ','.join(['%s'] * len(hash_ids))
@@ -480,6 +523,23 @@ class PgVectorEmbeddingStore:
                 logger.info(f"Deleted {deleted_count} records from {self.table_name}")
         except Exception as e:
             logger.error(f"Error deleting records: {e}")
+            self.conn.rollback()
+            raise
+
+    def delete_by_book(self, book_id: str):
+        """Delete all records for a specific book."""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    f"DELETE FROM {self.table_name} WHERE book_id = %s",
+                    (book_id,)
+                )
+                deleted_count = cur.rowcount
+                self.conn.commit()
+                logger.info(f"Deleted {deleted_count} records for book {book_id} from {self.table_name}")
+                return deleted_count
+        except Exception as e:
+            logger.error(f"Error deleting records for book {book_id}: {e}")
             self.conn.rollback()
             raise
     

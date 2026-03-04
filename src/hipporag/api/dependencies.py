@@ -17,11 +17,15 @@ except ImportError:
 
 from ..HippoRAG import HippoRAG
 from ..utils.config_utils import BaseConfig
+from ..multi_tenancy import MultiTenancyManager
 
 logger = logging.getLogger(__name__)
 
 # Global HippoRAG instance
 _hipporag_instance: Optional[HippoRAG] = None
+
+# Global multi-tenancy manager
+_multi_tenancy_manager: Optional[MultiTenancyManager] = None
 
 # Global indexing status
 _indexing_status: Dict[str, str] = {"status": "idle", "message": ""}
@@ -111,3 +115,56 @@ def reset_hipporag() -> None:
     global _hipporag_instance
     _hipporag_instance = None
     logger.info("HippoRAG instance reset")
+
+
+def get_multi_tenancy_manager() -> MultiTenancyManager:
+    """
+    Get or create the global multi-tenancy manager instance.
+
+    The manager handles book-based indexing and business-based queries.
+    """
+    global _multi_tenancy_manager
+    if _multi_tenancy_manager is None:
+        logger.info("Initializing multi-tenancy manager...")
+
+        # Create base config
+        unified_base_url = os.getenv("OPENAI_BASE_URL")
+        llm_base_url = os.getenv("HIPPORAG_LLM_BASE_URL") or unified_base_url
+        embedding_base_url = os.getenv("HIPPORAG_EMBEDDING_BASE_URL") or unified_base_url
+
+        # Parse DGraph connection
+        dgraph_grpc = os.getenv("DGRAPH_GRPC", "localhost:9080")
+        dgraph_host, dgraph_port = dgraph_grpc.rsplit(":", 1)
+        dgraph_config = {
+            "host": dgraph_host,
+            "port": int(dgraph_port)
+        }
+
+        config = BaseConfig(
+            save_dir=os.getenv("HIPPORAG_SAVE_DIR", "./outputs"),
+            llm_base_url=llm_base_url,
+            llm_name=os.getenv("HIPPORAG_LLM_MODEL", "gpt-4o-mini"),
+            embedding_model_name=os.getenv("HIPPORAG_EMBEDDING_MODEL", "text-embedding-3-small"),
+            embedding_base_url=embedding_base_url,
+            # DGraph configuration
+            graph_library="dgraph",
+            dgraph_config=dgraph_config,
+            # pgvector configuration
+            use_pgvector=os.getenv("USE_PGVECTOR", "true").lower() == "true",
+            pgvector_host=os.getenv("PGVECTOR_HOST", "localhost"),
+            pgvector_port=int(os.getenv("PGVECTOR_PORT", "5432")),
+            pgvector_database=os.getenv("PGVECTOR_DATABASE", "hipporag"),
+            pgvector_user=os.getenv("PGVECTOR_USER", "postgres"),
+            pgvector_password=os.getenv("PGVECTOR_PASSWORD", ""),
+            # Embedding batch size
+            embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
+        )
+
+        _multi_tenancy_manager = MultiTenancyManager(base_config=config)
+        logger.info("Multi-tenancy manager initialized successfully")
+    return _multi_tenancy_manager
+
+
+def is_multi_tenancy_initialized() -> bool:
+    """Check if multi-tenancy manager is initialized."""
+    return _multi_tenancy_manager is not None
