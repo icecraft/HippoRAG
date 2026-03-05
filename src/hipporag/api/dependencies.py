@@ -73,6 +73,10 @@ def get_hipporag() -> HippoRAG:
             "port": int(dgraph_port)
         }
 
+        # Determine dataset for language-specific prompts
+        # Use 'chinese' for Chinese language QA responses
+        dataset = os.getenv("HIPPORAG_DATASET", "chinese") if os.getenv("HIPPORAG_DATASET", "chinese") != "" else None
+
         # Create config with all environment variables
         config = BaseConfig(
             save_dir=os.getenv("HIPPORAG_SAVE_DIR", "./outputs"),
@@ -94,6 +98,8 @@ def get_hipporag() -> HippoRAG:
             force_index_from_scratch=os.getenv("FORCE_INDEX_FROM_SCRATCH", "false").lower() == "true",
             # Embedding batch size (阿里云限制为10)
             embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
+            # Dataset for language-specific prompts (use 'chinese' for Chinese responses)
+            dataset=dataset,
         )
 
         _hipporag_instance = HippoRAG(global_config=config)
@@ -140,6 +146,9 @@ def get_multi_tenancy_manager() -> MultiTenancyManager:
             "port": int(dgraph_port)
         }
 
+        # Determine dataset for language-specific prompts
+        dataset = os.getenv("HIPPORAG_DATASET", "chinese") if os.getenv("HIPPORAG_DATASET", "chinese") != "" else None
+
         config = BaseConfig(
             save_dir=os.getenv("HIPPORAG_SAVE_DIR", "./outputs"),
             llm_base_url=llm_base_url,
@@ -158,6 +167,8 @@ def get_multi_tenancy_manager() -> MultiTenancyManager:
             pgvector_password=os.getenv("PGVECTOR_PASSWORD", ""),
             # Embedding batch size
             embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
+            # Dataset for language-specific prompts
+            dataset=dataset,
         )
 
         _multi_tenancy_manager = MultiTenancyManager(base_config=config)

@@ -212,3 +212,71 @@ class BookDeleteResponse(BaseModel):
     """Response model for book deletion."""
     status: str = Field(..., description="Deletion status")
     message: str = Field(..., description="Status message")
+
+
+# ============== Book Management Models ==============
+
+class BookCreateRequest(BaseModel):
+    """Request model for creating a book."""
+    book_id: str = Field(..., description="Unique book identifier")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Optional book metadata")
+
+
+class BookCreateResponse(BaseModel):
+    """Response model for creating a book."""
+    status: str = Field(..., description="Creation status")
+    message: str = Field(..., description="Status message")
+    book_id: str = Field(..., description="Created book identifier")
+
+
+# ============== Business Management Models ==============
+
+class BusinessCreateRequest(BaseModel):
+    """Request model for creating a business."""
+    business_id: str = Field(..., description="Unique business identifier")
+    name: Optional[str] = Field(None, description="Business name")
+    description: Optional[str] = Field(None, description="Business description")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Optional business metadata")
+
+
+class BusinessCreateResponse(BaseModel):
+    """Response model for creating a business."""
+    status: str = Field(..., description="Creation status")
+    message: str = Field(..., description="Status message")
+    business_id: str = Field(..., description="Created business identifier")
+
+
+class BusinessInfo(BaseModel):
+    """Model for business information."""
+    business_id: str = Field(..., description="Business identifier")
+    name: Optional[str] = Field(None, description="Business name")
+    description: Optional[str] = Field(None, description="Business description")
+    book_count: int = Field(0, description="Number of books bound")
+    status: str = Field(..., description="Business status")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class BusinessUpdateRequest(BaseModel):
+    """Request model for updating a business."""
+    name: Optional[str] = Field(None, description="Business name")
+    description: Optional[str] = Field(None, description="Business description")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Optional business metadata")
+
+
+class BusinessUpdateResponse(BaseModel):
+    """Response model for updating a business."""
+    status: str = Field(..., description="Update status")
+    message: str = Field(..., description="Status message")
+    business_id: str = Field(..., description="Updated business identifier")
+
+
+class BusinessesListResponse(BaseModel):
+    """Response model for listing businesses."""
+    businesses: List[BusinessInfo] = Field(..., description="List of businesses")
+
+
+class BusinessDeleteResponse(BaseModel):
+    """Response model for business deletion."""
+    status: str = Field(..., description="Deletion status")
+    message: str = Field(..., description="Status message")

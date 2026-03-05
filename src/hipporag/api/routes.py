@@ -20,7 +20,12 @@ from .models import (
     BusinessBindRequest, BusinessBindResponse, BusinessUnbindRequest,
     BusinessBooksResponse, BusinessQARequest, BusinessQAResponse, BusinessQAResult,
     BusinessRetrieveRequest, BusinessRetrieveResponse, BusinessPassage,
-    BusinessQueryResult, BookDeleteResponse
+    BusinessQueryResult, BookDeleteResponse,
+    # Book management models
+    BookCreateRequest, BookCreateResponse,
+    # Business management models
+    BusinessCreateRequest, BusinessCreateResponse, BusinessInfo, BusinessUpdateRequest,
+    BusinessUpdateResponse, BusinessesListResponse, BusinessDeleteResponse
 )
 from .dependencies import (
     get_hipporag, get_indexing_status, set_indexing_status, is_hipporag_initialized,
@@ -630,3 +635,164 @@ async def qa_by_business(request: BusinessQARequest):
     except Exception as e:
         logger.error(f"Business QA failed: {e}")
         raise HTTPException(status_code=500, detail=f"Business QA failed: {str(e)}")
+
+
+# ============== Book Management Endpoints ==============
+
+@router.post("/book", response_model=BookCreateResponse, tags=["Book Management"])
+async def create_book(request: BookCreateRequest):
+    """
+    Create a new book record explicitly.
+    """
+    if not request.book_id:
+        raise HTTPException(status_code=400, detail="book_id is required")
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.create_book(request.book_id)
+        if result:
+            return BookCreateResponse(
+                status="created",
+                message=f"Book {request.book_id} created successfully",
+                book_id=request.book_id
+            )
+        else:
+            return BookCreateResponse(
+                status="exists",
+                message=f"Book {request.book_id} already exists",
+                book_id=request.book_id
+            )
+    except Exception as e:
+        logger.error(f"Book creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Book creation failed: {str(e)}")
+
+
+# ============== Business Management Endpoints ==============
+@router.post("/business", response_model=BusinessCreateResponse, tags=["Business Management"])
+async def create_business(request: BusinessCreateRequest):
+    """
+    Create a new business record.
+    """
+    if not request.business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.create_business(
+            business_id=request.business_id,
+            name=request.name,
+            description=request.description
+        )
+        if result:
+            return BusinessCreateResponse(
+                status="created",
+                message=f"Business {request.business_id} created successfully",
+                business_id=request.business_id
+            )
+        else:
+            return BusinessCreateResponse(
+                status="exists",
+                message=f"Business {request.business_id} already exists",
+                business_id=request.business_id
+            )
+    except Exception as e:
+        logger.error(f"Business creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Business creation failed: {str(e)}")
+
+
+@router.get("/business/{business_id}", response_model=BusinessInfo, tags=["Business Management"])
+async def get_business(business_id: str):
+    """
+    Get business information.
+    """
+    if not business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.get_business(business_id)
+        if result:
+            return BusinessInfo(
+                business_id=result['business_id'],
+                name=result.get('name'),
+                description=result.get('description'),
+                book_count=result.get('book_count', 0),
+                status=result.get('status', 'active'),
+                created_at=result.get('created_at'),
+                updated_at=result.get('updated_at')
+            )
+        else:
+            raise HTTPException(status_code=404, detail=f"Business {business_id} not found")
+    except Exception as e:
+        logger.error(f"Get business failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Get business failed: {str(e)}")
+
+
+@router.get("/businesses", response_model=BusinessesListResponse, tags=["Business Management"])
+async def list_businesses():
+    """
+    List all businesses.
+    """
+    try:
+        manager = get_multi_tenancy_manager()
+        businesses = manager.list_businesses()
+        business_infos = [
+            BusinessInfo(
+                business_id=b['business_id'],
+                name=b.get('name'),
+                description=b.get('description'),
+                book_count=b.get('book_count', 0),
+                status=b.get('status', 'active'),
+                created_at=b.get('created_at'),
+                updated_at=b.get('updated_at')
+            )
+            for b in businesses
+        ]
+        return BusinessesListResponse(businesses=business_infos)
+    except Exception as e:
+        logger.error(f"List businesses failed: {e}")
+        raise HTTPException(status_code=500, detail=f"List businesses failed: {str(e)}")
+
+
+@router.put("/business/{business_id}", response_model=BusinessUpdateResponse, tags=["Business Management"])
+async def update_business(business_id: str, request: BusinessUpdateRequest):
+    """
+    Update business information.
+    """
+    if not business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.update_business(
+            business_id=business_id,
+            name=request.name,
+            description=request.description
+        )
+        if result:
+            return BusinessUpdateResponse(
+                status="updated",
+                message=f"Business {business_id} updated successfully",
+                business_id=business_id
+            )
+        else:
+            raise HTTPException(status_code=404, detail=f"Business {business_id} not found")
+    except Exception as e:
+        logger.error(f"Update business failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Update business failed: {str(e)}")
+@router.delete("/business/{business_id}", response_model=BusinessDeleteResponse, tags=["Business Management"])
+async def delete_business(business_id: str):
+    """
+    Delete a business and all its bindings.
+    """
+    if not business_id:
+        raise HTTPException(status_code=400, detail="business_id is required")
+    try:
+        manager = get_multi_tenancy_manager()
+        result = manager.delete_business(business_id)
+        if result:
+            return BusinessDeleteResponse(
+                status="deleted",
+                message=f"Business {business_id} deleted successfully"
+            )
+        else:
+            raise HTTPException(status_code=404, detail=f"Business {business_id} not found")
+    except Exception as e:
+        logger.error(f"Delete business failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Delete business failed: {str(e)}")

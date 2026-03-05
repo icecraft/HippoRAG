@@ -3,14 +3,17 @@ Database operations for multi-tenancy support.
 
 Handles book_bindings and books tables for managing the many-to-many
 relationship between businesses and books.
+
+注意：表结构定义已移至 src/hipporag/database.py 统一管理。
 """
 
 import logging
-import os
 from typing import List, Dict, Optional
-from datetime import datetime
 import psycopg2
 from psycopg2.extras import execute_values
+
+# 导入统一的数据库管理器
+from ..database import init_multi_tenancy_tables_with_conn
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +25,13 @@ class MultiTenancyDB:
     Manages:
     - books: Book metadata (book_id, doc_count, status, etc.)
     - book_bindings: Many-to-many relationship between businesses and books
+
+    Note: 表初始化由 DatabaseManager 统一处理。
     """
 
     def __init__(self, db_config: Dict):
         """
-        Initialize the database connection and create tables.
+        Initialize the database connection and ensure tables exist.
 
         Parameters:
             db_config: PostgreSQL connection config dict with keys:
@@ -39,7 +44,7 @@ class MultiTenancyDB:
         self.db_config = db_config
         self.conn = None
         self._connect()
-        self._init_tables()
+        self._ensure_tables()
 
     def _connect(self):
         """Connect to PostgreSQL."""
@@ -51,68 +56,11 @@ class MultiTenancyDB:
             logger.error(f"Failed to connect to PostgreSQL: {e}")
             raise
 
-    def _init_tables(self):
-        """Initialize the multi-tenancy tables."""
-        with self.conn.cursor() as cur:
-            # Check if books table exists and has correct schema
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'books'
-            """)
-            existing_columns = [row[0] for row in cur.fetchall()]
-
-            # If books table exists but doesn't have book_id, rename it
-            if existing_columns and 'book_id' not in existing_columns:
-                logger.warning("Existing 'books' table doesn't have book_id column, renaming to books_old")
-                cur.execute("DROP TABLE IF EXISTS books_old")
-                cur.execute("ALTER TABLE books RENAME TO books_old")
-
-            # Create books table with correct schema
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS books (
-                    book_id VARCHAR(64) PRIMARY KEY,
-                    doc_count INT DEFAULT 0,
-                    status VARCHAR(16) DEFAULT 'ready',
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW()
-                );
-            """)
-
-            # Check if book_bindings table exists and has correct schema
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'book_bindings'
-            """)
-            binding_columns = [row[0] for row in cur.fetchall()]
-
-            # If book_bindings table exists but doesn't have correct schema, drop it
-            if binding_columns and 'book_id' not in binding_columns:
-                logger.warning("Existing 'book_bindings' table doesn't have correct schema, dropping")
-                cur.execute("DROP TABLE IF EXISTS book_bindings CASCADE")
-
-            # Create book_bindings table
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS book_bindings (
-                    id SERIAL PRIMARY KEY,
-                    business_id VARCHAR(64) NOT NULL,
-                    book_id VARCHAR(64) NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(business_id, book_id)
-                );
-            """)
-
-            # Create indexes
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_book_bindings_business
-                ON book_bindings(business_id);
-            """)
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_book_bindings_book
-                ON book_bindings(book_id);
-            """)
-
-            self.conn.commit()
-            logger.info("Multi-tenancy tables initialized")
+    def _ensure_tables(self):
+        """Ensure multi-tenancy tables exist (使用统一的数据库模块）。"""
+        # 使用统一的数据库模块初始化表
+        init_multi_tenancy_tables_with_conn(self.conn)
+        logger.info("Multi-tenancy tables ensured via database module")
 
     # ==================== Book Operations ====================
 
@@ -217,7 +165,7 @@ class MultiTenancyDB:
             cur.execute("SELECT 1 FROM books WHERE book_id = %s", (book_id,))
             return cur.fetchone() is not None
 
-    # ==================== Binding Operations ====================
+    # ==================== Business Operations ====================
 
     def bind_books(self, business_id: str, book_ids: List[str]) -> int:
         """
@@ -346,6 +294,115 @@ class MultiTenancyDB:
                 WHERE book_id = %s
             """, (book_id,))
             return [row[0] for row in cur.fetchall()]
+
+    # ==================== Business Operations ====================
+
+    def create_business(self, business_id: str, name: str = None, description: str = None) -> bool:
+        """
+        Create a new business record.
+
+        Parameters:
+            business_id: Unique business identifier
+            name: Business name (optional)
+            description: Business description (optional)
+
+        Returns:
+            True if created, False if already exists
+        """
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO businesses (business_id, name, description)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (business_id) DO NOTHING
+                    RETURNING business_id
+                """, (business_id, name, description))
+                result = cur.fetchone()
+                self.conn.commit()
+                return result is not None
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"Error creating business {business_id}: {e}")
+            raise
+
+    def get_business(self, business_id: str) -> Optional[Dict]:
+        """Get business metadata."""
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT business_id, name, description, book_count, status, created_at, updated_at
+                FROM businesses WHERE business_id = %s
+            """, (business_id,))
+            row = cur.fetchone()
+            if row:
+                return {
+                    'business_id': row[0],
+                    'name': row[1],
+                    'description': row[2],
+                    'book_count': row[3],
+                    'status': row[4],
+                    'created_at': row[5].isoformat() if row[5] else None,
+                    'updated_at': row[6].isoformat() if row[6] else None
+                }
+            return None
+
+    def list_businesses(self) -> List[Dict]:
+        """List all businesses."""
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT business_id, name, description, book_count, status, created_at, updated_at
+                FROM businesses ORDER BY created_at DESC
+            """)
+            return [{
+                'business_id': row[0],
+                'name': row[1],
+                'description': row[2],
+                'book_count': row[3],
+                'status': row[4],
+                'created_at': row[5].isoformat() if row[5] else None,
+                'updated_at': row[6].isoformat() if row[6] else None
+            } for row in cur.fetchall()]
+
+    def update_business_book_count(self, business_id: str, book_count: int):
+        """Update business book count."""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE businesses
+                    SET book_count = %s, updated_at = NOW()
+                    WHERE business_id = %s
+                """, (book_count, business_id))
+                self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"Error updating business {business_id}: {e}")
+            raise
+
+    def delete_business(self, business_id: str) -> bool:
+        """
+        Delete a business and all its bindings.
+
+        Returns:
+            True if deleted, False if not found
+        """
+        try:
+            with self.conn.cursor() as cur:
+                # First delete all bindings (cascade should handle this, but be explicit)
+                cur.execute("DELETE FROM book_bindings WHERE business_id = %s", (business_id,))
+                # Then delete the business
+                cur.execute("DELETE FROM businesses WHERE business_id = %s RETURNING business_id", (business_id,))
+                result = cur.fetchone()
+                self.conn.commit()
+                return result is not None
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"Error deleting business {business_id}: {e}")
+            raise
+
+    def business_exists(self, business_id: str) -> bool:
+        """Check if a business exists."""
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM businesses WHERE business_id = %s", (business_id,))
+            return cur.fetchone() is not None
 
     def close(self):
         """Close database connection."""

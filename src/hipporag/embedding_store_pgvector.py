@@ -8,6 +8,7 @@ from psycopg2 import sql
 import ast
 
 from .utils.misc_utils import compute_mdhash_id
+from .database import init_embedding_table_with_conn, _create_vector_index_with_conn
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,8 @@ class PgVectorEmbeddingStore:
     """
     EmbeddingStore implementation using pgvector for storage and retrieval.
     Provides the same interface as EmbeddingStore but uses PostgreSQL with pgvector extension.
+
+    Note: 表初始化由 database.py 统一管理。
     """
 
     def __init__(self, embedding_model, db_config: Dict, batch_size: int, namespace: str,
@@ -109,87 +112,16 @@ class PgVectorEmbeddingStore:
             raise
     
     def _init_table(self):
-        """Initialize the table with pgvector extension."""
-        with self.conn.cursor() as cur:
-            try:
-                # Enable pgvector extension
-                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                self.conn.commit()
-            except Exception as e:
-                logger.warning(f"Could not create vector extension (may already exist): {e}")
-                self.conn.rollback()
-
-            # Check if table exists and its schema
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = %s
-            """, (self.table_name,))
-            existing_columns = [row[0] for row in cur.fetchall()]
-
-            # Create table if not exists
-            if not existing_columns:
-                cur.execute(f"""
-                    CREATE TABLE {self.table_name} (
-                        hash_id TEXT PRIMARY KEY,
-                        content TEXT NOT NULL,
-                        embedding vector({self.embedding_dim}),
-                        book_id VARCHAR(64),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
-                self.conn.commit()
-                logger.info(f"Created table {self.table_name} with book_id column")
-            elif 'book_id' not in existing_columns:
-                # Add book_id column to existing table
-                try:
-                    cur.execute(f"ALTER TABLE {self.table_name} ADD COLUMN book_id VARCHAR(64);")
-                    self.conn.commit()
-                    logger.info(f"Added book_id column to existing table {self.table_name}")
-                except Exception as e:
-                    logger.warning(f"Could not add book_id column: {e}")
-                    self.conn.rollback()
-
-            # Create index for book_id
-            try:
-                cur.execute(f"""
-                    CREATE INDEX IF NOT EXISTS idx_{self.table_name}_book_id
-                    ON {self.table_name}(book_id);
-                """)
-                self.conn.commit()
-            except Exception as e:
-                logger.warning(f"Could not create book_id index: {e}")
-                self.conn.rollback()
-
-            # Create index for similarity search
-            index_name = f"{self.table_name}_embedding_idx"
-            try:
-                if self.index_type == "hnsw":
-                    # HNSW index (faster but uses more memory)
-                    cur.execute(f"""
-                        CREATE INDEX IF NOT EXISTS {index_name}
-                        ON {self.table_name}
-                        USING hnsw (embedding vector_cosine_ops)
-                        WITH (m = 16, ef_construction = 64);
-                    """)
-                else:
-                    # IVFFlat index (more memory-efficient)
-                    # Note: IVFFlat requires some data to exist before creating index
-                    # We'll create it after checking if table has data
-                    cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
-                    count = cur.fetchone()[0]
-                    if count > 0:
-                        cur.execute(f"""
-                            CREATE INDEX IF NOT EXISTS {index_name}
-                            ON {self.table_name}
-                            USING ivfflat (embedding vector_cosine_ops)
-                            WITH (lists = {self.index_lists});
-                        """)
-                    else:
-                        logger.info(f"Table {self.table_name} is empty, will create IVFFlat index after first insert")
-                self.conn.commit()
-            except Exception as e:
-                logger.warning(f"Could not create index (may already exist or need data first): {e}")
-                self.conn.rollback()
+        """Initialize the table using unified database module."""
+        # 使用统一的数据库模块初始化表
+        init_embedding_table_with_conn(
+            self.conn,
+            self.table_name,
+            self.embedding_dim,
+            self.index_type,
+            self.index_lists
+        )
+        logger.info(f"Table {self.table_name} initialized via database module")
     
     def _update_table_dimension(self, new_dim: int):
         """Update table to use new embedding dimension. Only works if table is empty."""
@@ -224,31 +156,13 @@ class PgVectorEmbeddingStore:
     
     def _ensure_index(self):
         """Ensure index exists after data is inserted."""
-        if self.index_type == "ivfflat":
-            index_name = f"{self.table_name}_embedding_idx"
-            with self.conn.cursor() as cur:
-                # Check if index exists
-                cur.execute("""
-                    SELECT COUNT(*) FROM pg_indexes 
-                    WHERE indexname = %s
-                """, (index_name,))
-                if cur.fetchone()[0] == 0:
-                    # Check if we have data
-                    cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
-                    count = cur.fetchone()[0]
-                    if count > 0:
-                        try:
-                            cur.execute(f"""
-                                CREATE INDEX {index_name}
-                                ON {self.table_name}
-                                USING ivfflat (embedding vector_cosine_ops)
-                                WITH (lists = {self.index_lists});
-                            """)
-                            self.conn.commit()
-                            logger.info(f"Created IVFFlat index {index_name}")
-                        except Exception as e:
-                            logger.warning(f"Could not create index: {e}")
-                            self.conn.rollback()
+        # 使用统一的数据库模块确保索引存在
+        _create_vector_index_with_conn(
+            self.conn,
+            self.table_name,
+            self.index_type,
+            self.index_lists
+        )
     
     def get_missing_string_hash_ids(self, texts: List[str]) -> Dict:
         """Get hash IDs that don't exist in the database."""

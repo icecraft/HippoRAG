@@ -251,9 +251,9 @@ class BaseConfig:
     
     # Dataset running specific attributes
     ## Dataset running specific attributes -> General
-    dataset: Optional[Literal['hotpotqa', 'hotpotqa_train', 'musique', '2wikimultihopqa']] = field(
+    dataset: Optional[Literal['hotpotqa', 'hotpotqa_train', 'musique', '2wikimultihopqa', 'chinese']] = field(
         default=None,
-        metadata={"help": "Dataset to use. If specified, it means we will run specific datasets. If not specified, it means we're running freely."}
+        metadata={"help": "Dataset to use. If specified, it means we will run specific datasets. If not specified, it means we're running freely. Use 'chinese' for Chinese language QA responses."}
     )
     ## Dataset running specific attributes -> Graph
     graph_type: Literal[
