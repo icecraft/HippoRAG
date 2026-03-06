@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-Example: Using MultiBookHippoRAG to manage multiple books
+Example: Using MultiTenancyManager to manage multiple books and businesses
 
-This example demonstrates how to:
-1. Create a MultiBookHippoRAG manager
-2. Add multiple books
-3. Query individual books
-4. Query across multiple books
-5. Manage book metadata
+This example demonstrates the new multi-tenancy approach:
+1. Create a MultiTenancyManager with database backend
+2. Add multiple books (each book has isolated data)
+3. Create businesses and bind books to them
+4. Query through business interface (searches across bound books)
+5. Manage book and business metadata
+
+Comparison with old approach:
+- Old (MultiBookHippoRAG): In-memory, single process, no persistence
+- New (MultiTenancyManager): Database-backed, persistent, supports business_id
 """
 
 import os
@@ -21,7 +25,7 @@ try:
 except ImportError:
     pass
 
-from hipporag import MultiBookHippoRAG
+from hipporag.multi_tenancy import MultiTenancyManager
 from hipporag.utils.config_utils import BaseConfig
 
 logging.basicConfig(level=logging.INFO)
@@ -38,16 +42,34 @@ def load_chapters_from_file(filepath: str) -> List[str]:
             raise ValueError("JSON file must contain an array of chapter strings")
 
 
+def get_env_config():
+    """Get configuration from environment variables."""
+    llm_model = os.getenv('HIPPORAG_LLM_MODEL') or os.getenv('LLM_NAME', 'gpt-4o-mini')
+    embedding_model = os.getenv('HIPPORAG_EMBEDDING_MODEL') or os.getenv('EMBEDDING_NAME', 'text-embedding-3-small')
+    base_url = os.getenv('OPENAI_BASE_URL') or os.getenv('LLM_BASE_URL', 'https://api.openai.com/v1')
+    llm_base_url = os.getenv('HIPPORAG_LLM_BASE_URL') or os.getenv('LLM_BASE_URL') or base_url
+    embedding_base_url = os.getenv('HIPPORAG_EMBEDDING_BASE_URL') or os.getenv('EMBEDDING_BASE_URL') or base_url
+
+    return {
+        'llm_model': llm_model,
+        'embedding_model': embedding_model,
+        'llm_base_url': llm_base_url,
+        'embedding_base_url': embedding_base_url,
+    }
+
+
 def main():
     """Main example function."""
-    
+
     # 1. Create base configuration
+    env_config = get_env_config()
+
     config = BaseConfig(
-        save_dir='outputs/multi_books',
-        llm_name=os.getenv('LLM_NAME', 'gpt-4o-mini'),
-        embedding_model_name=os.getenv('EMBEDDING_NAME', 'text-embedding-3-small'),
-        llm_base_url=os.getenv('LLM_BASE_URL', 'https://api.openai.com/v1'),
-        embedding_base_url=os.getenv('EMBEDDING_BASE_URL') or os.getenv('LLM_BASE_URL', 'https://api.openai.com/v1'),
+        save_dir=os.getenv('HIPPORAG_SAVE_DIR', './outputs'),
+        llm_name=env_config['llm_model'],
+        embedding_model_name=env_config['embedding_model'],
+        llm_base_url=env_config['llm_base_url'],
+        embedding_base_url=env_config['embedding_base_url'],
         retrieval_top_k=200,
         linking_top_k=5,
         max_qa_steps=3,
@@ -56,144 +78,210 @@ def main():
         embedding_batch_size=8,
         openie_mode="online",
         save_openie=True,
-        # Optional: Enable pgvector or Nebula Graph
-        # use_pgvector=True,
-        # pgvector_host='localhost',
-        # pgvector_port=5432,
-        # pgvector_database='hipporag',
-        # pgvector_user='postgres',
-        # pgvector_password='your_password',
-        # use_nebula_graph=True,
-        # nebula_host='127.0.0.1',
-        # nebula_port=9669,
-        # nebula_user='root',
-        # nebula_password='nebula',
-        # nebula_space_name='hipporag',
+        # Graph library: use dgraph
+        graph_library="dgraph",
+        dgraph_config={
+            "host": os.getenv('DGRAPH_GRPC', 'localhost:9080').split(':')[0],
+            "port": int(os.getenv('DGRAPH_GRPC', 'localhost:9080').split(':')[1]) if ':' in os.getenv('DGRAPH_GRPC', 'localhost:9080') else 9080
+        },
+        # pgvector configuration
+        use_pgvector=True,
+        pgvector_host=os.getenv('PGVECTOR_HOST', 'localhost'),
+        pgvector_port=int(os.getenv('PGVECTOR_PORT', '5432')),
+        pgvector_database=os.getenv('PGVECTOR_DATABASE', 'hipporag'),
+        pgvector_user=os.getenv('PGVECTOR_USER', 'postgres'),
+        pgvector_password=os.getenv('PGVECTOR_PASSWORD', ''),
     )
-    
-    # 2. Create MultiBookHippoRAG manager
-    manager = MultiBookHippoRAG(base_config=config)
-    
-    # 3. Add books
-    # Example: Add book 1
+
+    # 2. Create MultiTenancyManager
+    print("\n" + "=" * 60)
+    print("Creating MultiTenancyManager")
+    print("=" * 60)
+
+    manager = MultiTenancyManager(base_config=config)
+
+    # 3. Add books (each book has isolated data)
+    print("\n" + "=" * 60)
+    print("Adding Books")
+    print("=" * 60)
+
+    # Book 1: Alice in Wonderland
     book1_chapters = [
         "Alice was beginning to get very tired of sitting by her sister on the bank.",
         "The White Rabbit put on his spectacles. 'Where shall I begin, please your Majesty?'",
         "The Queen turned crimson with fury, and, after glaring at her for a moment like a wild beast, screamed 'Off with her head!'"
     ]
-    
+
     manager.add_book(
         book_id="alice_in_wonderland",
-        chapters=book1_chapters,
+        docs=book1_chapters,
         metadata={
             'title': 'Alice in Wonderland',
             'author': 'Lewis Carroll',
             'year': 1865
         }
     )
-    
-    # Example: Add book 2
+    print("Added book: alice_in_wonderland")
+
+    # Book 2: Literary Quotes
     book2_chapters = [
         "It was the best of times, it was the worst of times.",
         "A wonderful fact to reflect upon, that every human creature is constituted to be that profound secret and mystery to every other.",
         "I have a dream that one day this nation will rise up and live out the true meaning of its creed."
     ]
-    
+
     manager.add_book(
         book_id="literary_quotes",
-        chapters=book2_chapters,
+        docs=book2_chapters,
         metadata={
             'title': 'Literary Quotes Collection',
             'author': 'Various',
             'description': 'A collection of famous literary quotes'
         }
     )
-    
+    print("Added book: literary_quotes")
+
+    # Book 3: Technical Documentation
+    book3_chapters = [
+        "The system architecture consists of three main components: the frontend, backend, and database.",
+        "API endpoints are documented using OpenAPI specification version 3.0.",
+        "Authentication is handled via JWT tokens with a 24-hour expiration time."
+    ]
+
+    manager.add_book(
+        book_id="tech_docs",
+        docs=book3_chapters,
+        metadata={
+            'title': 'Technical Documentation',
+            'category': 'documentation'
+        }
+    )
+    print("Added book: tech_docs")
+
     # 4. List all books
-    print("\n" + "="*60)
-    print("All Books:")
-    print("="*60)
+    print("\n" + "=" * 60)
+    print("All Books")
+    print("=" * 60)
     books = manager.list_books()
     for book in books:
-        print(f"  - {book['book_id']}: {book.get('title', 'N/A')} ({book.get('num_chapters', 0)} chapters)")
-    
-    # 5. Get book information
-    print("\n" + "="*60)
-    print("Book Information:")
-    print("="*60)
-    book_info = manager.get_book_info("alice_in_wonderland")
-    print(json.dumps(book_info, indent=2, default=str))
-    
-    # 6. Query single book
-    print("\n" + "="*60)
-    print("Query Single Book:")
-    print("="*60)
+        print(f"  - {book['book_id']}: {book.get('doc_count', 0)} docs, status: {book.get('status', 'unknown')}")
+
+    # 5. Create businesses and bind books
+    print("\n" + "=" * 60)
+    print("Creating Businesses and Binding Books")
+    print("=" * 60)
+
+    # Business A: Literature Research (can access book 1 and 2)
+    manager.bind_books_to_business(
+        business_id="literature_research",
+        book_ids=["alice_in_wonderland", "literary_quotes"]
+    )
+    print("Created business 'literature_research' with books: alice_in_wonderland, literary_quotes")
+
+    # Business B: Technical Team (can access book 2 and 3)
+    manager.bind_books_to_business(
+        business_id="tech_team",
+        book_ids=["literary_quotes", "tech_docs"]
+    )
+    print("Created business 'tech_team' with books: literary_quotes, tech_docs")
+
+    # 6. List businesses
+    print("\n" + "=" * 60)
+    print("Businesses and Their Books")
+    print("=" * 60)
+    businesses = manager.list_businesses()
+    for business in businesses:
+        print(f"\n  Business: {business['business_id']}")
+        books = manager.get_business_books(business['business_id'])
+        for book in books:
+            print(f"    - {book['book_id']}")
+
+    # 7. Query through business interface
+    print("\n" + "=" * 60)
+    print("Querying Through Business Interface")
+    print("=" * 60)
+
+    # Query from literature_research perspective
     query = "What happened to Alice?"
-    solutions, messages, metadata = manager.query_single_book("alice_in_wonderland", query)
-    
-    if solutions:
-        solution = solutions[0]
-        print(f"Query: {query}")
-        print(f"Answer: {solution.answer}")
-        print(f"\nRetrieved Documents:")
-        for i, doc in enumerate(solution.docs[:3], 1):
-            print(f"  [{i}] {doc[:100]}...")
-    
-    # 7. Query multiple books
-    print("\n" + "="*60)
-    print("Query Multiple Books:")
-    print("="*60)
-    query = "What is the main theme?"
-    results = manager.query(
-        query=query,
-        book_ids=["alice_in_wonderland", "literary_quotes"],
-        merge_results=True
+    print(f"\nQuery (literature_research): {query}")
+    solutions, answers, metadata = manager.query_business(
+        business_id="literature_research",
+        queries=[query]
     )
-    
-    print(f"Query: {query}")
-    print(f"\nFound {len(results)} results across books:")
-    for i, solution in enumerate(results[:3], 1):
-        book_id = solution.metadata.get('book_id', 'unknown')
-        print(f"\n  [{i}] From book '{book_id}':")
-        print(f"      Answer: {solution.answer[:100]}...")
-        print(f"      Top doc: {solution.docs[0][:80]}..." if solution.docs else "      No docs")
-    
-    # 8. Query without merging (get results per book)
-    print("\n" + "="*60)
-    print("Query Without Merging (Per Book):")
-    print("="*60)
-    query = "What is the main character?"
-    book_results = manager.query(
-        query=query,
-        book_ids=["alice_in_wonderland", "literary_quotes"],
-        merge_results=False
+    if solutions and len(solutions) > 0:
+        print(f"Answer: {answers[0] if answers else 'No answer'}")
+
+    # Query from tech_team perspective (should NOT find Alice)
+    print(f"\nQuery (tech_team): {query}")
+    solutions, answers, metadata = manager.query_business(
+        business_id="tech_team",
+        queries=[query]
     )
-    
-    print(f"Query: {query}")
-    for book_id, (solutions, messages, metadata) in book_results.items():
-        print(f"\n  Book '{book_id}':")
-        if solutions:
-            solution = solutions[0]
-            print(f"    Answer: {solution.answer[:100]}...")
-        else:
-            print("    No results")
-    
-    # 9. Load existing book (if you restart the script)
-    print("\n" + "="*60)
-    print("Loading Existing Book:")
-    print("="*60)
-    try:
-        # This will load the book if it was previously indexed
-        existing_book = manager.load_existing_book("alice_in_wonderland")
-        print("Successfully loaded existing book")
-    except ValueError as e:
-        print(f"Could not load: {e}")
-    
-    print("\n" + "="*60)
+    if solutions and len(solutions) > 0:
+        print(f"Answer: {answers[0] if answers else 'No answer'}")
+        print("(tech_team doesn't have access to alice_in_wonderland)")
+
+    # Query about technical content
+    query = "What is the system architecture?"
+    print(f"\nQuery (tech_team): {query}")
+    solutions, answers, metadata = manager.query_business(
+        business_id="tech_team",
+        queries=[query]
+    )
+    if solutions and len(solutions) > 0:
+        print(f"Answer: {answers[0] if answers else 'No answer'}")
+
+    # 8. Retrieve passages through business interface
+    print("\n" + "=" * 60)
+    print("Retrieving Passages")
+    print("=" * 60)
+
+    query = "time"
+    print(f"\nRetrieve (literature_research): {query}")
+    solutions, metadata = manager.retrieve_business(
+        business_id="literature_research",
+        queries=[query],
+        num_to_retrieve=3
+    )
+    if solutions and len(solutions) > 0:
+        print(f"Found {len(solutions[0].docs) if hasattr(solutions[0], 'docs') else 0} passages")
+
+    # 9. Unbind a book from business
+    print("\n" + "=" * 60)
+    print("Unbinding Books")
+    print("=" * 60)
+
+    manager.unbind_books_from_business(
+        business_id="literature_research",
+        book_ids=["literary_quotes"]
+    )
+    print("Unbound 'literary_quotes' from 'literature_research'")
+
+    books = manager.get_business_books("literature_research")
+    print(f"\nBooks now bound to 'literature_research':")
+    for book in books:
+        print(f"  - {book['book_id']}")
+
+    # 10. Delete a book
+    print("\n" + "=" * 60)
+    print("Deleting a Book")
+    print("=" * 60)
+
+    manager.delete_book("tech_docs")
+    print("Deleted book: tech_docs")
+
+    books = manager.list_books()
+    print(f"\nRemaining books: {[b['book_id'] for b in books]}")
+
+    print("\n" + "=" * 60)
     print("Example completed!")
-    print("="*60)
+    print("=" * 60)
+    print("\nKey concepts:")
+    print("  - book_id: Isolates data for each book (embeddings, graph nodes)")
+    print("  - business_id: Access control layer (many-to-many with books)")
+    print("  - Business queries only search across bound books")
+    print("  - Deleting a book removes its data from all stores")
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,47 @@
+# HippoRAG DGraph Schema
+# This schema is automatically applied by DGraphAdapter during initialization
+#
+# DGraph automatically creates the schema when nodes are inserted,
+# but this file serves as documentation for the expected schema.
+
+# Node properties
+name: string @index(exact) .
+node_type: string @index(exact) .
+content: string .
+properties: string .
+weight: float .
+edge_type: string .
+book_id: string @index(exact) .
+
+# Node type definition
+type Node {
+    name
+    node_type
+    content
+    properties
+    book_id
+}
+
+# Edge type definition (DGraph represents edges as predicates)
+# Edges are created between nodes using the 'linked_to' predicate
+# Edge properties (weight, edge_type) are stored on the edge itself
+
+# Example of creating nodes and edges:
+#
+# Mutation to create a node:
+# {
+#   set {
+#     _:node1 <dgraph.type> "Node" .
+#     _:node1 <name> "entity_name" .
+#     _:node1 <node_type> "entity" .
+#     _:node1 <content> "entity content" .
+#     _:node1 <book_id> "book_001" .
+#   }
+# }
+#
+# Mutation to create an edge:
+# {
+#   set {
+#     _:node1 <linked_to> _:node2 (weight=1.0, edge_type="fact") .
+#   }
+# }

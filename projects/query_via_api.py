@@ -3,12 +3,19 @@
 Query HippoRAG via HTTP API.
 
 This script provides a command-line interface to query documents
-through the HippoRAG REST API.
+through the HippoRAG REST API with multi-tenancy support.
 
 Usage:
+    # Multi-tenancy mode (recommended)
+    python query_via_api.py --query "What is X?" --business_id my_business --api_url http://localhost:8000
+    python query_via_api.py --interactive --business_id my_business
+
+    # Single-tenancy mode (backward compatible)
     python query_via_api.py --query "What is X?" --api_url http://localhost:8000
-    python query_via_api.py --interactive --api_url http://localhost:8000
-    python query_via_api.py --query_file queries.txt --output_file results.txt
+    python query_via_api.py --interactive
+
+    # Batch queries
+    python query_via_api.py --query_file queries.txt --output_file results.txt --business_id my_business
 """
 
 import os
@@ -41,6 +48,7 @@ def check_api_health(api_url: str) -> bool:
 def retrieve(
     queries: List[str],
     api_url: str = "http://localhost:8000",
+    business_id: Optional[str] = None,
     num_to_retrieve: Optional[int] = None,
     return_scores: bool = False,
     use_dpr: bool = False,
@@ -52,6 +60,7 @@ def retrieve(
     Args:
         queries: List of query strings
         api_url: Base URL of the HippoRAG API
+        business_id: Business identifier for multi-tenancy
         num_to_retrieve: Number of documents to retrieve per query
         return_scores: Whether to return retrieval scores
         use_dpr: Use DPR retrieval instead of graph-based
@@ -60,7 +69,11 @@ def retrieve(
     Returns:
         Response data as dict
     """
-    endpoint = "/retrieve/dpr" if use_dpr else "/retrieve"
+    # Use business-specific endpoint if business_id is provided
+    if business_id:
+        endpoint = "/business/retrieve"
+    else:
+        endpoint = "/retrieve/dpr" if use_dpr else "/retrieve"
 
     payload = {
         "queries": queries,
@@ -68,6 +81,8 @@ def retrieve(
     }
     if num_to_retrieve is not None:
         payload["num_to_retrieve"] = num_to_retrieve
+    if business_id:
+        payload["business_id"] = business_id
 
     response = requests.post(
         f"{api_url}{endpoint}",
@@ -81,6 +96,7 @@ def retrieve(
 def question_answering(
     queries: List[str],
     api_url: str = "http://localhost:8000",
+    business_id: Optional[str] = None,
     num_to_retrieve: Optional[int] = None,
     use_dpr: bool = False,
     timeout: int = 300
@@ -91,6 +107,7 @@ def question_answering(
     Args:
         queries: List of question strings
         api_url: Base URL of the HippoRAG API
+        business_id: Business identifier for multi-tenancy
         num_to_retrieve: Number of documents to retrieve per query
         use_dpr: Use DPR QA instead of graph-based
         timeout: Request timeout in seconds
@@ -98,16 +115,55 @@ def question_answering(
     Returns:
         Response data as dict
     """
-    endpoint = "/qa/dpr" if use_dpr else "/qa"
+    # Use business-specific endpoint if business_id is provided
+    if business_id:
+        endpoint = "/business/qa"
+    else:
+        endpoint = "/qa/dpr" if use_dpr else "/qa"
 
     payload = {"queries": queries}
     if num_to_retrieve is not None:
         payload["num_to_retrieve"] = num_to_retrieve
+    if business_id:
+        payload["business_id"] = business_id
 
     response = requests.post(
         f"{api_url}{endpoint}",
         json=payload,
         timeout=timeout
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def bind_books_to_business(api_url: str, business_id: str, book_ids: List[str]) -> dict:
+    """Bind books to a business."""
+    response = requests.post(
+        f"{api_url}/business/bind",
+        json={"business_id": business_id, "book_ids": book_ids},
+        timeout=30
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def unbind_books_from_business(api_url: str, business_id: str, book_ids: List[str]) -> dict:
+    """Unbind books from a business."""
+    response = requests.post(
+        f"{api_url}/business/unbind",
+        json={"business_id": business_id, "book_ids": book_ids},
+        timeout=30
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_business_books(api_url: str, business_id: str) -> dict:
+    """Get books bound to a business."""
+    response = requests.get(
+        f"{api_url}/business/books",
+        params={"business_id": business_id},
+        timeout=30
     )
     response.raise_for_status()
     return response.json()
@@ -155,12 +211,15 @@ def print_retrieve_result(result: dict, max_passage_len: int = 200):
             print(content)
 
 
-def interactive_qa(api_url: str, use_dpr: bool = False, num_to_retrieve: Optional[int] = None):
+def interactive_qa(api_url: str, business_id: Optional[str] = None,
+                   use_dpr: bool = False, num_to_retrieve: Optional[int] = None):
     """Interactive QA mode."""
     print("\n" + "=" * 60)
     print("HippoRAG Query Interface")
     print("=" * 60)
     print(f"\nAPI URL: {api_url}")
+    if business_id:
+        print(f"Business ID: {business_id}")
     print(f"Mode: {'DPR' if use_dpr else 'Graph-based'}")
     print("\nType 'exit' or 'quit' to end.")
     print("Type 'switch' to toggle between graph-based and DPR mode.\n")
@@ -187,6 +246,7 @@ def interactive_qa(api_url: str, use_dpr: bool = False, num_to_retrieve: Optiona
             result = question_answering(
                 queries=[query],
                 api_url=api_url,
+                business_id=business_id,
                 num_to_retrieve=num_to_retrieve,
                 use_dpr=current_dpr
             )
@@ -207,6 +267,7 @@ def interactive_qa(api_url: str, use_dpr: bool = False, num_to_retrieve: Optiona
 def batch_query(
     queries: List[str],
     api_url: str,
+    business_id: Optional[str] = None,
     output_file: Optional[str] = None,
     use_dpr: bool = False,
     num_to_retrieve: Optional[int] = None,
@@ -219,6 +280,7 @@ def batch_query(
         result = question_answering(
             queries=queries,
             api_url=api_url,
+            business_id=business_id,
             num_to_retrieve=num_to_retrieve,
             use_dpr=use_dpr
         )
@@ -226,6 +288,7 @@ def batch_query(
         result = retrieve(
             queries=queries,
             api_url=api_url,
+            business_id=business_id,
             num_to_retrieve=num_to_retrieve,
             use_dpr=use_dpr
         )
@@ -262,13 +325,32 @@ def batch_query(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Query HippoRAG via HTTP API"
+        description="Query HippoRAG via HTTP API",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Multi-tenancy mode
+    python query_via_api.py --query "What is X?" --business_id my_business
+
+    # Interactive mode
+    python query_via_api.py --interactive --business_id my_business
+
+    # Manage business bindings
+    python query_via_api.py --business_id my_business --bind_books book1 book2
+    python query_via_api.py --business_id my_business --show_books
+        """
     )
     parser.add_argument(
         '--api_url',
         type=str,
         default='http://localhost:8000',
         help='HippoRAG API base URL (default: http://localhost:8000)'
+    )
+    parser.add_argument(
+        '--business_id',
+        type=str,
+        default=None,
+        help='Business identifier for multi-tenancy (optional)'
     )
     parser.add_argument(
         '--query',
@@ -318,6 +400,27 @@ def main():
         help='Request timeout in seconds (default: 300)'
     )
 
+    # Business management arguments
+    parser.add_argument(
+        '--bind_books',
+        nargs='+',
+        type=str,
+        default=None,
+        help='Bind books to business (requires --business_id)'
+    )
+    parser.add_argument(
+        '--unbind_books',
+        nargs='+',
+        type=str,
+        default=None,
+        help='Unbind books from business (requires --business_id)'
+    )
+    parser.add_argument(
+        '--show_books',
+        action='store_true',
+        help='Show books bound to business (requires --business_id)'
+    )
+
     args = parser.parse_args()
 
     # Check API health
@@ -326,10 +429,41 @@ def main():
         logger.error("Make sure the server is running: uvicorn hipporag.api:app --host 0.0.0.0 --port 8000")
         return 1
 
+    # Business management mode
+    if args.bind_books:
+        if not args.business_id:
+            logger.error("--business_id is required when using --bind_books")
+            return 1
+        logger.info(f"Binding books to business '{args.business_id}': {args.bind_books}")
+        result = bind_books_to_business(args.api_url, args.business_id, args.bind_books)
+        print(f"\nStatus: {result['status']}")
+        print(f"Bound books: {result.get('book_ids', [])}")
+        return 0
+
+    if args.unbind_books:
+        if not args.business_id:
+            logger.error("--business_id is required when using --unbind_books")
+            return 1
+        logger.info(f"Unbinding books from business '{args.business_id}': {args.unbind_books}")
+        result = unbind_books_from_business(args.api_url, args.business_id, args.unbind_books)
+        print(f"\nStatus: {result['status']}")
+        return 0
+
+    if args.show_books:
+        if not args.business_id:
+            logger.error("--business_id is required when using --show_books")
+            return 1
+        result = get_business_books(args.api_url, args.business_id)
+        print(f"\nBooks bound to business '{args.business_id}':")
+        for book in result.get('books', []):
+            print(f"  - {book['book_id']}: {book.get('doc_count', 0)} docs")
+        return 0
+
     # Interactive mode
     if args.interactive:
         interactive_qa(
             api_url=args.api_url,
+            business_id=args.business_id,
             use_dpr=args.dpr,
             num_to_retrieve=args.num_to_retrieve
         )
@@ -346,6 +480,7 @@ def main():
         # Default to interactive mode
         interactive_qa(
             api_url=args.api_url,
+            business_id=args.business_id,
             use_dpr=args.dpr,
             num_to_retrieve=args.num_to_retrieve
         )
@@ -359,6 +494,7 @@ def main():
         batch_query(
             queries=queries,
             api_url=args.api_url,
+            business_id=args.business_id,
             output_file=args.output_file,
             use_dpr=args.dpr,
             num_to_retrieve=args.num_to_retrieve,
