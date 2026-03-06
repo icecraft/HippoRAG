@@ -6,12 +6,10 @@ import sqlite3
 from copy import deepcopy
 from typing import List, Tuple
 
-import httpx
-import openai
 from filelock import FileLock
-from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+from ..openai_client import OpenAIClientFactory
 from ..utils.config_utils import BaseConfig
 from ..utils.llm_utils import (
     TextChatMessage
@@ -134,15 +132,15 @@ class CacheOpenAI(BaseLLM):
         self.cache_file_name = os.path.join(self.cache_dir, cache_filename)
 
         self._init_llm_config()
-        if high_throughput:
-            limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
-            client = httpx.Client(limits=limits, timeout=httpx.Timeout(5*60, read=5*60))
-        else:
-            client = None
 
         self.max_retries = kwargs.get("max_retries", 2)
 
-        self.openai_client = OpenAI(base_url=self.llm_base_url, http_client=client, max_retries=self.max_retries)
+        # Use unified OpenAI client factory
+        self.openai_client = OpenAIClientFactory.create_for_llm(
+            base_url=self.llm_base_url,
+            high_throughput=high_throughput,
+            max_retries=self.max_retries
+        )
 
     def _init_llm_config(self) -> None:
         config_dict = self.global_config.__dict__

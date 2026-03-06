@@ -3,8 +3,8 @@ from typing import List, Optional
 
 import numpy as np
 from tqdm import tqdm
-from openai import OpenAI
 
+from ..openai_client import OpenAIClientFactory
 from ..utils.config_utils import BaseConfig
 from ..utils.logging_utils import get_logger
 from .base import BaseEmbeddingModel, EmbeddingConfig
@@ -23,11 +23,13 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
 
         self._init_embedding_config()
 
-        # Initializing the embedding model
+        # Initializing the embedding model using unified factory
         logger.debug(
             f"Initializing {self.__class__.__name__}'s embedding model with params: {self.embedding_config.model_init_params}")
 
-        self.client = OpenAI(base_url=self.global_config.embedding_base_url)
+        self.client = OpenAIClientFactory.create_for_embedding(
+            base_url=self.global_config.embedding_base_url
+        )
 
 
     def _init_embedding_config(self) -> None:
