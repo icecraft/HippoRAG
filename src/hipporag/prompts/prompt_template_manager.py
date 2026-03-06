@@ -185,12 +185,12 @@ class PromptTemplateManager:
         """
         try:
             template = self.get_template(name)
-            print(f"Template name: {name}")
+            logger.info(f"Template name: {name}")
             if isinstance(template, Template):
-                print(template.template)
+                logger.debug(f"Template content: {template.template}")
             elif isinstance(template, list):
                 for item in template:
-                    print(f"Role: {item['role']}, Content: {item['content']}")
+                    logger.debug(f"Role: {item['role']}, Content: {item['content']}")
             logger.info(f"Printed template '{name}'.")
         except KeyError as e:
             logger.error(f"Failed to print template '{name}': {e}")

@@ -81,7 +81,7 @@ class DSPyFilter:
                             parsed_value = value
                     parsed = TypeAdapter(Fact).validate_python(parsed_value).fact
                 except Exception as e:
-                    print(
+                    logger.warning(
                         f"Error parsing field {k}: {e}.\n\n\t\tOn attempting to parse the value\n```\n{value}\n```"
                     )
 
@@ -119,7 +119,7 @@ class DSPyFilter:
             response = self.llm_call(query, json.dumps(fact_before_filter))
             generated_facts = self.parse_filter(response)
         except Exception as e:
-            print('exception', e)
+            logger.warning(f'Rerank exception: {e}')
             generated_facts = []
         result_indices = []
         for generated_fact in generated_facts:

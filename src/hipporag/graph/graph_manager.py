@@ -153,7 +153,7 @@ class GraphManager:
         graph_builder.add_new_edges()
 
         logger.info(f"Graph construction completed!")
-        print(self.get_graph_info())
+        logger.info(self.get_graph_info())
 
 
 def create_graph_manager(global_config: BaseConfig,
