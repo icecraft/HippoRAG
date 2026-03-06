@@ -83,8 +83,8 @@ class DGraphAdapter(GraphInterface):
     Wraps dgraph client to implement GraphInterface.
     """
     
-    def __init__(self, client: Any = None, connection_config: Optional[Dict] = None, 
-                 directed: bool = True, schema_initialized: bool = False):
+    def __init__(self, client: Any = None, connection_config: Optional[Dict] = None,
+                 directed: bool = True, schema_initialized: bool = False, book_id: Optional[str] = None):
         """
         Initialize adapter with dgraph connection.
         
@@ -141,12 +141,14 @@ class DGraphAdapter(GraphInterface):
         properties: string .
         weight: float .
         edge_type: string .
-        
+        book_id: string @index(exact) .
+
         type Node {
             name
             node_type
             content
             properties
+            book_id
         }
         """
         try:
@@ -213,14 +215,20 @@ class DGraphAdapter(GraphInterface):
                 return len(self._edge_cache)
             return 0
     
-    def add_vertices(self, n: int, attributes: Optional[Dict[str, List]] = None):
-        """Add vertices to the graph."""
+    def add_vertices(self, n: int, attributes: Optional[Dict[str, List]] = None, book_id: Optional[str] = None):
+        """Add vertices to the graph.
+
+        Args:
+            n: Number of vertices to add
+            attributes: Dict of attribute name to list of values
+            book_id: Optional book identifier for multi-tenancy isolation
+        """
         if attributes is None:
             attributes = {}
-        
+
         if n == 0:
             return
-        
+
         # Prepare nodes for batch insertion
         # Use a unique identifier for each blank node
         nodes = []
@@ -233,6 +241,9 @@ class DGraphAdapter(GraphInterface):
             for attr_name, attr_values in attributes.items():
                 if i < len(attr_values):
                     node[attr_name] = attr_values[i]
+            # Add book_id if provided
+            if book_id:
+                node["book_id"] = book_id
             nodes.append((blank_id, node))
         
         # Insert nodes in batch
