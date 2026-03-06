@@ -203,8 +203,9 @@ class DatabaseManager:
     # ==================== 多租户表 ====================
 
     def _init_multi_tenancy_tables(self):
-        """初始化多租户相关的表（books 和 book_bindings）。"""
+        """初始化多租户相关的表（books, businesses, book_bindings）。"""
         self._init_books_table()
+        self._init_businesses_table()
         self._init_book_bindings_table()
 
     def _init_books_table(self):
@@ -223,10 +224,12 @@ class DatabaseManager:
                 cur.execute("DROP TABLE IF EXISTS books_old")
                 cur.execute("ALTER TABLE books RENAME TO books_old")
 
-            # 创建 books 表
+            # 创建 books 表（包含 name 和 description 列）
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS books (
                     book_id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(256),
+                    description TEXT,
                     doc_count INT DEFAULT 0,
                     status VARCHAR(16) DEFAULT 'ready',
                     created_at TIMESTAMP DEFAULT NOW(),
@@ -236,6 +239,36 @@ class DatabaseManager:
 
             self.conn.commit()
             logger.info("books 表已初始化")
+
+    def _init_businesses_table(self):
+        """初始化 businesses 表。"""
+        with self.conn.cursor() as cur:
+            # 检查 businesses 表是否存在且具有正确的 schema
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'businesses'
+            """)
+            business_columns = [row[0] for row in cur.fetchall()]
+
+            # 如果 businesses 表存在但没有正确的 schema，删除它
+            if business_columns and 'business_id' not in business_columns:
+                logger.warning("现有 'businesses' 表 schema 不正确，删除重建")
+                cur.execute("DROP TABLE IF EXISTS businesses CASCADE")
+
+            # 创建 businesses 表
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS businesses (
+                    business_id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(256),
+                    description TEXT,
+                    status VARCHAR(16) DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
+            self.conn.commit()
+            logger.info("businesses 表已初始化")
 
     def _init_book_bindings_table(self):
         """初始化 book_bindings 表。"""
@@ -252,11 +285,11 @@ class DatabaseManager:
                 logger.warning("现有 'book_bindings' 表 schema 不正确，删除重建")
                 cur.execute("DROP TABLE IF EXISTS book_bindings CASCADE")
 
-            # 创建 book_bindings 表
+            # 创建 book_bindings 表（包含对 businesses 的外键引用）
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS book_bindings (
                     id SERIAL PRIMARY KEY,
-                    business_id VARCHAR(64) NOT NULL,
+                    business_id VARCHAR(64) NOT NULL REFERENCES businesses(business_id) ON DELETE CASCADE,
                     book_id VARCHAR(64) NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
                     created_at TIMESTAMP DEFAULT NOW(),
                     UNIQUE(business_id, book_id)

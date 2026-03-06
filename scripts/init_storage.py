@@ -43,9 +43,9 @@ def get_pgvector_config() -> dict:
     return {
         'host': os.getenv('PGVECTOR_HOST', 'localhost'),
         'port': int(os.getenv('PGVECTOR_PORT', '5432')),
-        'database': os.getenv('PGVECTOR_DATABASE', 'hipporag'),
-        'user': os.getenv('PGVECTOR_USER', 'postgres'),
-        'password': os.getenv('PGVECTOR_PASSWORD', ''),
+        'database': os.getenv('PGVECTOR_DATABASE', 'test'),
+        'user': os.getenv('PGVECTOR_USER', 'admin'),
+        'password': os.getenv('PGVECTOR_PASSWORD', 'admin'),
     }
 
 
@@ -112,7 +112,7 @@ def init_dgraph() -> bool:
         logger.info("Initializing DGraph")
         logger.info("=" * 60)
 
-        dgraph_grpc = os.getenv('DGRAPH_GRPC', 'localhost:9080')
+        dgraph_grpc = os.getenv('DGRAPH_GRPC', 'localhost:19081')
         logger.info(f"Connecting to DGraph at {dgraph_grpc}")
 
         # Create adapter which initializes schema automatically
