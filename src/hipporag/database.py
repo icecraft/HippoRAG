@@ -211,20 +211,7 @@ class DatabaseManager:
     def _init_books_table(self):
         """初始化 books 表。"""
         with self.conn.cursor() as cur:
-            # 检查 books 表是否存在且具有正确的 schema
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'books'
-            """)
-            existing_columns = [row[0] for row in cur.fetchall()]
-
-            # 如果 books 表存在但没有 book_id 列，重命名旧表
-            if existing_columns and 'book_id' not in existing_columns:
-                logger.warning("现有 'books' 表没有 book_id 列，重命名为 books_old")
-                cur.execute("DROP TABLE IF EXISTS books_old")
-                cur.execute("ALTER TABLE books RENAME TO books_old")
-
-            # 创建 books 表（包含 name 和 description 列）
+            # 创建 books 表
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS books (
                     book_id VARCHAR(64) PRIMARY KEY,
@@ -243,18 +230,6 @@ class DatabaseManager:
     def _init_businesses_table(self):
         """初始化 businesses 表。"""
         with self.conn.cursor() as cur:
-            # 检查 businesses 表是否存在且具有正确的 schema
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'businesses'
-            """)
-            business_columns = [row[0] for row in cur.fetchall()]
-
-            # 如果 businesses 表存在但没有正确的 schema，删除它
-            if business_columns and 'business_id' not in business_columns:
-                logger.warning("现有 'businesses' 表 schema 不正确，删除重建")
-                cur.execute("DROP TABLE IF EXISTS businesses CASCADE")
-
             # 创建 businesses 表
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS businesses (
@@ -273,19 +248,7 @@ class DatabaseManager:
     def _init_book_bindings_table(self):
         """初始化 book_bindings 表。"""
         with self.conn.cursor() as cur:
-            # 检查 book_bindings 表是否存在且具有正确的 schema
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'book_bindings'
-            """)
-            binding_columns = [row[0] for row in cur.fetchall()]
-
-            # 如果 book_bindings 表存在但没有正确的 schema，删除它
-            if binding_columns and 'book_id' not in binding_columns:
-                logger.warning("现有 'book_bindings' 表 schema 不正确，删除重建")
-                cur.execute("DROP TABLE IF EXISTS book_bindings CASCADE")
-
-            # 创建 book_bindings 表（包含对 businesses 的外键引用）
+            # 创建 book_bindings 表
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS book_bindings (
                     id SERIAL PRIMARY KEY,
@@ -541,19 +504,6 @@ def init_multi_tenancy_tables_with_conn(conn):
         conn: psycopg2 连接对象
     """
     with conn.cursor() as cur:
-        # ==================== books 表 ====================
-        cur.execute("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'books'
-        """)
-        existing_columns = [row[0] for row in cur.fetchall()]
-
-        # 如果 books 表存在但没有 book_id 列，重命名旧表
-        if existing_columns and 'book_id' not in existing_columns:
-            logger.warning("现有 'books' 表没有 book_id 列，重命名为 books_old")
-            cur.execute("DROP TABLE IF EXISTS books_old")
-            cur.execute("ALTER TABLE books RENAME TO books_old")
-
         # 创建 books 表
         cur.execute("""
             CREATE TABLE IF NOT EXISTS books (
@@ -567,18 +517,6 @@ def init_multi_tenancy_tables_with_conn(conn):
             );
         """)
 
-        # ==================== businesses 表 ====================
-        cur.execute("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'businesses'
-        """)
-        business_columns = [row[0] for row in cur.fetchall()]
-
-        # 如果 businesses 表存在但没有正确的 schema，删除它
-        if business_columns and 'business_id' not in business_columns:
-            logger.warning("现有 'businesses' 表 schema 不正确，删除重建")
-            cur.execute("DROP TABLE IF EXISTS businesses CASCADE")
-
         # 创建 businesses 表
         cur.execute("""
             CREATE TABLE IF NOT EXISTS businesses (
@@ -590,18 +528,6 @@ def init_multi_tenancy_tables_with_conn(conn):
                 updated_at TIMESTAMP DEFAULT NOW()
             );
         """)
-
-        # ==================== book_bindings 表 ====================
-        cur.execute("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'book_bindings'
-        """)
-        binding_columns = [row[0] for row in cur.fetchall()]
-
-        # 如果 book_bindings 表存在但没有正确的 schema，删除它
-        if binding_columns and 'book_id' not in binding_columns:
-            logger.warning("现有 'book_bindings' 表 schema 不正确，删除重建")
-            cur.execute("DROP TABLE IF EXISTS book_bindings CASCADE")
 
         # 创建 book_bindings 表
         cur.execute("""
