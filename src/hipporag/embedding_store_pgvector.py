@@ -83,9 +83,9 @@ class PgVectorEmbeddingStore:
             elif 'text-embedding-v4' in model_name or 'text-embedding-4' in model_name:
                 self.embedding_dim = 1024
             else:
-                # Default to 1536 (most common)
-                logger.warning(f"Could not determine embedding_dim from model '{model_name}', defaulting to 1536")
-                self.embedding_dim = 1536
+                # Default to 1024 (common for many embedding models)
+                logger.warning(f"Could not determine embedding_dim from model '{model_name}', defaulting to 1024")
+                self.embedding_dim = 1024
             logger.info(f"Inferred embedding dimension {self.embedding_dim} from model name: {model_name}")
         
         # If we got actual dimension from test but it differs from inferred, use actual

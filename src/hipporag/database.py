@@ -48,12 +48,12 @@ class DatabaseManager:
             logger.error(f"连接 PostgreSQL 失败: {e}")
             raise
 
-    def init_all_tables(self, embedding_dim: int = 1536):
+    def init_all_tables(self, embedding_dim: int = 1024):
         """
         初始化所有表。
 
         Parameters:
-            embedding_dim: 嵌入向量维度，默认 1536
+            embedding_dim: 嵌入向量维度，默认 1024
         """
         self._init_pgvector_extension()
         self._init_embedding_tables(embedding_dim)
@@ -329,7 +329,7 @@ class DatabaseManager:
 
 # ==================== 便捷函数 ====================
 
-def init_database(db_config: Dict, embedding_dim: int = 1536) -> DatabaseManager:
+def init_database(db_config: Dict, embedding_dim: int = 1024) -> DatabaseManager:
     """
     初始化数据库并创建所有必要的表。
 

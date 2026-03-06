@@ -16,7 +16,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS embeddings_chunk (
     hash_id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(1024),
     book_id VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS embeddings_chunk (
 CREATE TABLE IF NOT EXISTS embeddings_entity (
     hash_id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(1024),
     book_id VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS embeddings_entity (
 CREATE TABLE IF NOT EXISTS embeddings_fact (
     hash_id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(1024),
     book_id VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

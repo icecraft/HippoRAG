@@ -10,7 +10,7 @@ This script is STANDALONE and does NOT depend on hipporag package.
 It should be run BEFORE installing/starting HippoRAG.
 
 Usage:
-    python scripts/init_storage.py [--embedding-dim 1536] [--skip-dgraph] [--skip-pgvector]
+    python scripts/init_storage.py [--embedding-dim 1024] [--skip-dgraph] [--skip-pgvector]
 
 Environment Variables:
     PGVECTOR_HOST      - PostgreSQL host (default: localhost)
@@ -52,7 +52,7 @@ def get_pgvector_config() -> dict:
     }
 
 
-def init_pgvector(embedding_dim: int = 1536) -> bool:
+def init_pgvector(embedding_dim: int = 1024) -> bool:
     """
     Initialize PostgreSQL with pgvector extension (standalone, no hipporag dependency).
 
@@ -242,8 +242,8 @@ It uses only psycopg2 and pydgraph directly.
     parser.add_argument(
         '--embedding-dim',
         type=int,
-        default=1536,
-        help='Embedding vector dimension (default: 1536)'
+        default=1024,
+        help='Embedding vector dimension (default: 1024)'
     )
     parser.add_argument(
         '--skip-pgvector',
