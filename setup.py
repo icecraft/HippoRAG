@@ -26,6 +26,7 @@ setuptools.setup(
         "boto3", # No version specified
         "filelock",  # No version specified
         "psycopg2-binary>=2.9.0",  # For pgvector support
-        "pydgraph>=25.0.0",  # For dgraph graph storage
+        "pydgraph>=25.0.0",  # For dgraph graph storage,
+        "fastapi>=0.130"
     ]
 )
