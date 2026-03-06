@@ -296,6 +296,123 @@ curl -X POST http://localhost:8000/business/bind \
 }
 ```
 
+### 业务管理
+
+#### `POST /business`
+创建新的业务记录。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/business \
+  -H "Content-Type: application/json" \
+  -d '{
+    "business_id": "company_001",
+    "name": "示例公司",
+    "description": "这是一个示例业务"
+  }'
+```
+
+**响应：**
+```json
+{
+  "status": "created",
+  "message": "Business company_001 created successfully",
+  "business_id": "company_001"
+}
+```
+
+#### `GET /business/{business_id}`
+获取业务信息。
+
+**响应：**
+```json
+{
+  "business_id": "company_001",
+  "name": "示例公司",
+  "description": "这是一个示例业务",
+  "book_count": 2,
+  "status": "active",
+  "created_at": "2026-03-04T10:00:00Z",
+  "updated_at": "2026-03-04T10:00:00Z"
+}
+```
+
+#### `GET /businesses`
+列出所有业务。
+
+**响应：**
+```json
+{
+  "businesses": [
+    {
+      "business_id": "company_001",
+      "name": "示例公司",
+      "description": "这是一个示例业务",
+      "book_count": 2,
+      "status": "active",
+      "created_at": "2026-03-04T10:00:00Z",
+      "updated_at": "2026-03-04T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### `PUT /business/{business_id}`
+更新业务信息。
+
+**请求：**
+```bash
+curl -X PUT http://localhost:8000/business/company_001 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "新公司名称",
+    "description": "更新后的描述"
+  }'
+```
+
+**响应：**
+```json
+{
+  "status": "updated",
+  "message": "Business company_001 updated successfully",
+  "business_id": "company_001"
+}
+```
+
+#### `DELETE /business/{business_id}`
+删除业务及其所有绑定关系。
+
+**响应：**
+```json
+{
+  "status": "deleted",
+  "message": "Business company_001 deleted successfully"
+}
+```
+
+### 书籍管理
+
+#### `POST /book`
+创建新的书籍记录（不索引文档）。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/book \
+  -H "Content-Type: application/json" \
+  -d '{
+    "book_id": "novel_001"
+  }'
+```
+
+**响应：**
+```json
+{
+  "status": "created",
+  "message": "Book novel_001 created successfully",
+  "book_id": "novel_001"
+}
+```
+
 ### 业务查询
 
 #### `POST /business/qa`
@@ -448,19 +565,29 @@ print(f"  Business B: {result['results'][0]['answer']}")
 |------|------|------|
 | GET | `/health` | 健康检查 |
 | GET | `/status` | 索引进度 |
+| **索引** | | |
 | POST | `/index` | 异步索引文档 |
 | POST | `/index/sync` | 同步索引文档 |
+| **检索** | | |
 | POST | `/retrieve` | HippoRAG 图检索 |
 | POST | `/retrieve/dpr` | DPR 向量检索 |
 | POST | `/qa` | HippoRAG 问答 |
 | POST | `/qa/dpr` | DPR 问答 |
-| **多租户** | | |
+| **书籍管理** | | |
+| POST | `/book` | 创建书籍记录 |
 | POST | `/book/index/sync` | 按书籍索引文档 |
 | GET | `/books` | 列出所有书籍 |
 | DELETE | `/book` | 删除书籍 |
+| **业务管理** | | |
+| POST | `/business` | 创建业务记录 |
+| GET | `/businesses` | 列出所有业务 |
+| GET | `/business/{business_id}` | 获取业务信息 |
+| PUT | `/business/{business_id}` | 更新业务信息 |
+| DELETE | `/business/{business_id}` | 删除业务 |
 | POST | `/business/bind` | 绑定书籍到业务 |
 | POST | `/business/unbind` | 解除绑定 |
 | GET | `/business/books` | 列出业务书籍 |
+| **业务查询** | | |
 | POST | `/business/qa` | 按业务问答 |
 | POST | `/business/retrieve` | 按业务检索 |
 
