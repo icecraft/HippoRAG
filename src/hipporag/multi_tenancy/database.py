@@ -329,8 +329,15 @@ class MultiTenancyDB:
         """Get business metadata."""
         with self.conn.cursor() as cur:
             cur.execute("""
-                SELECT business_id, name, description, book_count, status, created_at, updated_at
-                FROM businesses WHERE business_id = %s
+                SELECT b.business_id, b.name, b.description,
+                       COALESCE(bb.book_count, 0) as book_count,
+                       b.status, b.created_at, b.updated_at
+                FROM businesses b
+                LEFT JOIN (
+                    SELECT business_id, COUNT(*) as book_count
+                    FROM book_bindings GROUP BY business_id
+                ) bb ON b.business_id = bb.business_id
+                WHERE b.business_id = %s
             """, (business_id,))
             row = cur.fetchone()
             if row:
@@ -349,8 +356,15 @@ class MultiTenancyDB:
         """List all businesses."""
         with self.conn.cursor() as cur:
             cur.execute("""
-                SELECT business_id, name, description, book_count, status, created_at, updated_at
-                FROM businesses ORDER BY created_at DESC
+                SELECT b.business_id, b.name, b.description,
+                       COALESCE(bb.book_count, 0) as book_count,
+                       b.status, b.created_at, b.updated_at
+                FROM businesses b
+                LEFT JOIN (
+                    SELECT business_id, COUNT(*) as book_count
+                    FROM book_bindings GROUP BY business_id
+                ) bb ON b.business_id = bb.business_id
+                ORDER BY b.created_at DESC
             """)
             return [{
                 'business_id': row[0],

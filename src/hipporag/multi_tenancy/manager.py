@@ -159,6 +159,10 @@ class MultiTenancyManager:
         """List all books."""
         return self.db.list_books()
 
+    def create_book(self, book_id: str) -> bool:
+        """Create a new book record."""
+        return self.db.create_book(book_id)
+
     def delete_book(self, book_id: str) -> Dict:
         """
         Delete a book and all its data.
@@ -527,6 +531,27 @@ class MultiTenancyManager:
             'business_id': business_id,
             'books_searched': book_ids
         }
+
+    # Business management proxy methods
+    def create_business(self, business_id: str, name: str = None, description: str = None) -> Dict:
+        """Create a new business."""
+        return self.db.create_business(business_id, name, description)
+
+    def get_business(self, business_id: str) -> Optional[Dict]:
+        """Get business information."""
+        return self.db.get_business(business_id)
+
+    def list_businesses(self) -> List[Dict]:
+        """List all businesses."""
+        return self.db.list_businesses()
+
+    def update_business(self, business_id: str, name: str = None, description: str = None) -> bool:
+        """Update business information."""
+        return self.db.update_business(business_id, name, description)
+
+    def delete_business(self, business_id: str) -> bool:
+        """Delete a business."""
+        return self.db.delete_business(business_id)
 
     def close(self):
         """Close all connections and cleanup."""
