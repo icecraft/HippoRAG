@@ -74,11 +74,22 @@ def get_hipporag() -> HippoRAG:
         }
 
         # Determine dataset for language-specific prompts
-        # Use 'chinese' for Chinese language QA responses
-        dataset = os.getenv("HIPPORAG_DATASET", "chinese") if os.getenv("HIPPORAG_DATASET", "chinese") != "" else None
+        # By default, uses 'chinese' (from BaseConfig) for Chinese language QA responses
+        # Set HIPPORAG_DATASET="" (empty string) to disable Chinese mode
+        # Set HIPPORAG_DATASET="musique" etc. for other datasets
+        dataset_env = os.getenv("HIPPORAG_DATASET")
+        if dataset_env is None:
+            # No env var set, use BaseConfig default ('chinese')
+            dataset = None  # Will use BaseConfig default
+        elif dataset_env == "":
+            # Empty string explicitly disables Chinese mode
+            dataset = None
+        else:
+            # Use the specified value
+            dataset = dataset_env
 
-        # Create config with all environment variables
-        config = BaseConfig(
+        # Build config kwargs, only include dataset if explicitly set via env
+        config_kwargs = dict(
             save_dir=os.getenv("HIPPORAG_SAVE_DIR", "./outputs"),
             llm_base_url=llm_base_url,
             llm_name=os.getenv("HIPPORAG_LLM_MODEL", "gpt-4o-mini"),
@@ -98,9 +109,12 @@ def get_hipporag() -> HippoRAG:
             force_index_from_scratch=os.getenv("FORCE_INDEX_FROM_SCRATCH", "false").lower() == "true",
             # Embedding batch size (阿里云限制为10)
             embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
-            # Dataset for language-specific prompts (use 'chinese' for Chinese responses)
-            dataset=dataset,
         )
+        # Only override dataset if explicitly set via environment variable
+        if dataset is not None:
+            config_kwargs["dataset"] = dataset
+
+        config = BaseConfig(**config_kwargs)
 
         _hipporag_instance = HippoRAG(global_config=config)
         logger.info("HippoRAG instance initialized successfully")
@@ -147,9 +161,20 @@ def get_multi_tenancy_manager() -> MultiTenancyManager:
         }
 
         # Determine dataset for language-specific prompts
-        dataset = os.getenv("HIPPORAG_DATASET", "chinese") if os.getenv("HIPPORAG_DATASET", "chinese") != "" else None
+        # By default, uses 'chinese' (from BaseConfig) for Chinese language QA responses
+        dataset_env = os.getenv("HIPPORAG_DATASET")
+        if dataset_env is None:
+            # No env var set, use BaseConfig default ('chinese')
+            dataset = None  # Will use BaseConfig default
+        elif dataset_env == "":
+            # Empty string explicitly disables Chinese mode
+            dataset = None
+        else:
+            # Use the specified value
+            dataset = dataset_env
 
-        config = BaseConfig(
+        # Build config kwargs
+        config_kwargs = dict(
             save_dir=os.getenv("HIPPORAG_SAVE_DIR", "./outputs"),
             llm_base_url=llm_base_url,
             llm_name=os.getenv("HIPPORAG_LLM_MODEL", "gpt-4o-mini"),
@@ -167,9 +192,12 @@ def get_multi_tenancy_manager() -> MultiTenancyManager:
             pgvector_password=os.getenv("PGVECTOR_PASSWORD", ""),
             # Embedding batch size
             embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
-            # Dataset for language-specific prompts
-            dataset=dataset,
         )
+        # Only override dataset if explicitly set via environment variable
+        if dataset is not None:
+            config_kwargs["dataset"] = dataset
+
+        config = BaseConfig(**config_kwargs)
 
         _multi_tenancy_manager = MultiTenancyManager(base_config=config)
         logger.info("Multi-tenancy manager initialized successfully")
