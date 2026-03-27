@@ -7,7 +7,7 @@ for businesses that can access multiple books.
 
 import logging
 import os
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .database import MultiTenancyDB
@@ -177,8 +177,8 @@ class MultiTenancyManager:
         try:
             # Get the HippoRAG instance to clean up its data
             if book_id in self._book_instances:
-                hipporag = self._book_instances[book_id]
                 # TODO: Add cleanup methods to HippoRAG for DGraph and embeddings
+                pass
 
             # Remove from cache
             self._remove_book_instance(book_id)
@@ -465,7 +465,7 @@ class MultiTenancyManager:
             try:
                 qa_instance = self._get_or_create_book_instance(book_id)
                 break
-            except:
+            except Exception:
                 continue
 
         if qa_instance is None:
@@ -559,7 +559,7 @@ class MultiTenancyManager:
             try:
                 # HippoRAG may have cleanup methods
                 pass
-            except:
+            except Exception:
                 pass
         self._book_instances.clear()
         self.db.close()

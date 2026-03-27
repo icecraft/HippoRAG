@@ -4,7 +4,7 @@ QA helper functions for HippoRAG.
 Contains internal QA logic extracted from HippoRAG class.
 """
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Optional, Tuple
 
 from .utils.misc_utils import QuerySolution
 

@@ -1,12 +1,11 @@
 import numpy as np
-from tqdm import tqdm
 import os
-from typing import Union, Optional, List, Dict, Set, Any, Tuple, Literal
+from typing import List
 import logging
 from copy import deepcopy
 import pandas as pd
 
-from .utils.misc_utils import compute_mdhash_id, NerRawOutput, TripleRawOutput
+from .utils.misc_utils import compute_mdhash_id
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +123,7 @@ class EmbeddingStore:
         self.hash_ids.extend(hash_ids)
         self.texts.extend(texts)
 
-        logger.info(f"Saving new records.")
+        logger.info("Saving new records.")
         self._save_data()
 
     def delete(self, hash_ids):
@@ -140,7 +139,7 @@ class EmbeddingStore:
             self.texts.pop(idx)
             self.embeddings.pop(idx)
 
-        logger.info(f"Saving record after deletion.")
+        logger.info("Saving record after deletion.")
         self._save_data()
 
     def get_row(self, hash_id):

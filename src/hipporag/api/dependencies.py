@@ -6,7 +6,7 @@ Manages HippoRAG instance and indexing status.
 
 import os
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 # Load environment variables from .env file
 try:
@@ -30,6 +30,14 @@ _multi_tenancy_manager: Optional[MultiTenancyManager] = None
 # Global indexing status
 _indexing_status: Dict[str, str] = {"status": "idle", "message": ""}
 
+# Global indexing progress (for SSE)
+_indexing_progress: Dict[str, Any] = {
+    "total_docs": 0,
+    "processed_docs": 0,
+    "current_stage": "",
+    "error": None
+}
+
 
 def get_indexing_status() -> Dict[str, str]:
     """Get the current indexing status."""
@@ -40,6 +48,36 @@ def set_indexing_status(status: str, message: str) -> None:
     """Set the indexing status."""
     global _indexing_status
     _indexing_status = {"status": status, "message": message}
+
+
+def get_indexing_progress() -> Dict[str, Any]:
+    """Get the current indexing progress."""
+    return _indexing_progress.copy()
+
+
+def set_indexing_progress(total_docs: int = None, processed_docs: int = None,
+                          current_stage: str = None, error: str = None) -> None:
+    """Set the indexing progress."""
+    global _indexing_progress
+    if total_docs is not None:
+        _indexing_progress["total_docs"] = total_docs
+    if processed_docs is not None:
+        _indexing_progress["processed_docs"] = processed_docs
+    if current_stage is not None:
+        _indexing_progress["current_stage"] = current_stage
+    if error is not None:
+        _indexing_progress["error"] = error
+
+
+def reset_indexing_progress() -> None:
+    """Reset indexing progress."""
+    global _indexing_progress
+    _indexing_progress = {
+        "total_docs": 0,
+        "processed_docs": 0,
+        "current_stage": "",
+        "error": None
+    }
 
 
 def get_hipporag() -> HippoRAG:

@@ -4,12 +4,10 @@ Retrieval helper functions for HippoRAG.
 Contains internal retrieval logic extracted from HippoRAG class.
 """
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Tuple
 import numpy as np
-from tqdm import tqdm
 
 from .utils.misc_utils import QuerySolution
-from .utils.embed_utils import retrieve_knn
 
 logger = logging.getLogger(__name__)
 

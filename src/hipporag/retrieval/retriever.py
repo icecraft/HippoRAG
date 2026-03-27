@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import List, Dict, Tuple, Set, Optional
+from typing import List, Dict, Tuple
 import numpy as np
 from tqdm import tqdm
 from ..utils.config_utils import BaseConfig
@@ -124,11 +124,11 @@ class Retriever:
         # Create mapping from node name to vertex index
         try:
             name_to_idx = {node["name"]: idx for idx, node in enumerate(self.graph.get_vertices())}
-            self.node_name_to_vertex_idx = igraph_name_to_idx
-            
+            self.node_name_to_vertex_idx = name_to_idx
+
             # Check if all entity and passage nodes are in the graph
-            missing_entity_nodes = [node_key for node_key in self.entity_node_keys if node_key not in igraph_name_to_idx]
-            missing_passage_nodes = [node_key for node_key in self.passage_node_keys if node_key not in igraph_name_to_idx]
+            missing_entity_nodes = [node_key for node_key in self.entity_node_keys if node_key not in name_to_idx]
+            missing_passage_nodes = [node_key for node_key in self.passage_node_keys if node_key not in name_to_idx]
             
             if missing_entity_nodes or missing_passage_nodes:
                 logger.warning(f"Missing nodes in graph: {len(missing_entity_nodes)} entity nodes, {len(missing_passage_nodes)} passage nodes")

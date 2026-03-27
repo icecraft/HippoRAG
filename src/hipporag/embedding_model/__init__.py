@@ -1,5 +1,8 @@
-from .base import EmbeddingConfig, BaseEmbeddingModel
+from .base import EmbeddingConfig as EmbeddingConfig
+from .base import BaseEmbeddingModel as BaseEmbeddingModel
 from .OpenAI import OpenAIEmbeddingModel
+
+__all__ = ["EmbeddingConfig", "BaseEmbeddingModel", "OpenAIEmbeddingModel"]
 
 from ..utils.logging_utils import get_logger
 

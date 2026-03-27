@@ -23,6 +23,30 @@ export const createBook = (book_id) => api.post('/book', { book_id });
 export const deleteBook = (book_id) => api.delete(`/book?book_id=${book_id}`);
 export const indexDocuments = (book_id, docs) => api.post('/book/index/sync', { book_id, docs });
 
+// Async indexing with SSE progress
+export const indexDocumentsAsync = (book_id, docs) => api.post('/book/index', { book_id, docs });
+
+// SSE progress tracking
+export const createProgressEventSource = () => {
+  const baseURL = process.env.REACT_APP_API_URL || '/api';
+  return new EventSource(`${baseURL}/index/progress`);
+};
+
+// File upload for indexing
+export const uploadFile = (file, onUploadProgress) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/index/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress,
+    timeout: 300000, // 5 minutes for large files
+  });
+};
+
+// Async document indexing (returns immediately, use SSE for progress)
+export const indexDocumentsAsync = (book_id, docs) =>
+  api.post('/book/index', { book_id, docs });
+
 // Businesses
 export const getBusinesses = () => api.get('/businesses');
 export const getBusiness = (business_id) => api.get(`/business/${business_id}`);

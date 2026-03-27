@@ -122,7 +122,7 @@ class GraphBuilder:
         else:
             current_graph_nodes = set()
 
-        logger.info(f"Adding OpenIE triples to graph.")
+        logger.info("Adding OpenIE triples to graph.")
 
         for chunk_key, triples in zip(chunk_ids, chunk_triples):
             entities_in_chunk = set()
@@ -175,7 +175,7 @@ class GraphBuilder:
 
         num_new_chunks = 0
 
-        logger.info(f"Connecting passage nodes to phrase nodes.")
+        logger.info("Connecting passage nodes to phrase nodes.")
 
         for idx, chunk_key in enumerate(chunk_ids):
 
@@ -205,7 +205,7 @@ class GraphBuilder:
         from tqdm import tqdm
         from ..utils.embed_utils import retrieve_knn
         
-        logger.info(f"Expanding graph with synonymy edges")
+        logger.info("Expanding graph with synonymy edges")
 
         entity_id_to_row = entity_embedding_store.get_all_id_to_rows()
         entity_node_keys = list(entity_id_to_row.keys())

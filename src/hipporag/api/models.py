@@ -214,6 +214,36 @@ class BookDeleteResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
+# ============== Progress Tracking Models ==============
+
+class IndexProgress(BaseModel):
+    """Real-time indexing progress."""
+    stage: str = Field(..., description="Current stage: embedding, openie_n building, graph_construction")
+    total_docs: int = Field(..., description="Total documents to process")
+    processed_docs: int = Field(default=0, description="Documents processed so far")
+    current_doc: int = Field(default=0, description="Current document being processed")
+    message: str = Field(default="", description="Status message")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    percentage: float = Field(default=0.0, description="Progress percentage (0-100)")
+
+
+class IndexProgressResponse(BaseModel):
+    """Response for indexing progress."""
+    job_id: str = Field(..., description="Unique job identifier")
+    status: str = Field(..., description="Job status: pending, running, completed, failed")
+    progress: Optional[IndexProgress] = Field(None, description="Current progress details")
+    result: Optional[IndexResponse] = Field(None, description="Final result when completed")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+
+# ============== SSE Event Models ==============
+
+class IndexProgressEvent(BaseModel):
+    """SSE event for indexing progress."""
+    event: str = Field(default="progress", description="Event type")
+    data: IndexProgress = Field(..., description="Progress data")
+
+
 # ============== Book Management Models ==============
 
 class BookCreateRequest(BaseModel):

@@ -273,7 +273,9 @@ class BaseConfig:
     
     
     def __post_init__(self):
-        if self.save_dir is None: # If save_dir not given
-            if self.dataset is None: self.save_dir = 'outputs' # running freely
-            else: self.save_dir = os.path.join('outputs', self.dataset) # customize your dataset's output dir here
+        if self.save_dir is None:  # If save_dir not given
+            if self.dataset is None:
+                self.save_dir = 'outputs'  # running freely
+            else:
+                self.save_dir = os.path.join('outputs', self.dataset)  # customize your dataset's output dir here
         logger.debug(f"Initializing the highest level of save_dir to be {self.save_dir}")

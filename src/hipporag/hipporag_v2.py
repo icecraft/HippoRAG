@@ -10,12 +10,12 @@ This is a refactored version that delegates to specialized components:
 The class acts as a facade coordinating these components.
 """
 import logging
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Tuple
 
 from .utils.config_utils import BaseConfig
 from .utils.misc_utils import QuerySolution
-from .llm import _get_llm_class, BaseLLM
-from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
+from .llm import _get_llm_class
+from .embedding_model import _get_embedding_model_class
 from .embedding_store import create_embedding_store
 from .information_extraction.openie_manager import OpenIEManager
 from .graph import create_graph_manager

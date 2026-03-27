@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Set
+from typing import List, Dict
 from ..utils.config_utils import BaseConfig
 from ..embedding_store import EmbeddingStore
 from ..information_extraction import OpenIE
@@ -70,9 +70,9 @@ class Indexer:
             docs : List[str]
                 A list of documents to be indexed.
         """
-        logger.info(f"Indexing Documents")
+        logger.info("Indexing Documents")
 
-        logger.info(f"Performing OpenIE")
+        logger.info("Performing OpenIE")
 
         self.chunk_embedding_store.insert_strings(docs)
         chunk_to_rows = self.chunk_embedding_store.get_all_id_to_rows()
@@ -105,13 +105,13 @@ class Indexer:
         entity_nodes, chunk_triple_entities = extract_entity_nodes(chunk_triples)
         facts = flatten_facts(chunk_triples)
 
-        logger.info(f"Encoding Entities")
+        logger.info("Encoding Entities")
         self.entity_embedding_store.insert_strings(entity_nodes)
 
-        logger.info(f"Encoding Facts")
+        logger.info("Encoding Facts")
         self.fact_embedding_store.insert_strings([str(fact) for fact in facts])
 
-        logger.info(f"Constructing Graph")
+        logger.info("Constructing Graph")
 
         self.node_to_node_stats.clear()
         self.ent_node_to_chunk_ids.clear()

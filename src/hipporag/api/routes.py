@@ -4,10 +4,13 @@ API routes for HippoRAG.
 Defines all RESTful endpoints for indexing, retrieval, and QA operations.
 """
 
+import asyncio
+import json
 import logging
-from typing import List
+from typing import List, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi.responses import StreamingResponse
 
 from .models import (
     IndexRequest, IndexResponse,
@@ -15,7 +18,6 @@ from .models import (
     QARequest, QAResponse, QAResult,
     DPRRequest, DPRQARequest,
     HealthResponse, StatusResponse,
-    # Multi-tenancy models
     BookIndexRequest, BookIndexResponse, BookInfo, BooksListResponse,
     BusinessBindRequest, BusinessBindResponse, BusinessUnbindRequest,
     BusinessBooksResponse, BusinessQARequest, BusinessQAResponse, BusinessQAResult,
@@ -29,7 +31,7 @@ from .models import (
 )
 from .dependencies import (
     get_hipporag, get_indexing_status, set_indexing_status, is_hipporag_initialized,
-    get_multi_tenancy_manager, is_multi_tenancy_initialized
+    get_multi_tenancy_manager, get_indexing_progress, set_indexing_progress, reset_indexing_progress
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,56 @@ async def get_status():
     )
 
 
+# ============== SSE Progress Endpoint ==============
+
+@router.get("/index/progress", tags=["Indexing"])
+async def index_progress_stream():
+    """
+    SSE endpoint for real-time indexing progress.
+
+    Returns Server-Sent Events with progress updates during indexing.
+    Use this to track progress of large file indexing operations.
+    """
+    async def event_generator() -> AsyncGenerator[str, None]:
+        last_progress = None
+        while True:
+            progress = get_indexing_progress()
+            status = get_indexing_status()
+
+            # Only send if progress changed
+            if progress != last_progress:
+                event_data = {
+                    "status": status["status"],
+                    "message": status["message"],
+                    "progress": progress
+                }
+                yield f"data: {json.dumps(event_data)}\n\n"
+                last_progress = progress.copy() if progress else None
+
+            # Stop if indexing is complete or failed
+            if status["status"] in ["completed", "failed"]:
+                # Send final event
+                event_data = {
+                    "status": status["status"],
+                    "message": status["message"],
+                    "progress": progress,
+                    "done": True
+                }
+                yield f"data: {json.dumps(event_data)}\n\n"
+                break
+
+            await asyncio.sleep(0.5)  # Poll every 500ms
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
 # ============== Indexing Endpoints ==============
 
 @router.post("/index", response_model=IndexResponse, tags=["Indexing"])
@@ -69,6 +121,7 @@ async def index_documents(request: IndexRequest, background_tasks: BackgroundTas
 
     This endpoint indexes the provided documents in the background,
     allowing the request to return immediately.
+    Use /index/progress SSE endpoint to track progress.
     """
     if get_indexing_status()["status"] == "indexing":
         raise HTTPException(status_code=409, detail="Indexing already in progress")
@@ -76,22 +129,134 @@ async def index_documents(request: IndexRequest, background_tasks: BackgroundTas
     if not request.docs:
         raise HTTPException(status_code=400, detail="No documents provided")
 
-    def run_indexing(docs: List[str]):
+    def run_indexing_with_progress(docs: List[str]):
         try:
+            reset_indexing_progress()
+            set_indexing_progress(total_docs=len(docs), current_stage="starting")
             set_indexing_status("indexing", f"Indexing {len(docs)} documents...")
+
             hipporag = get_hipporag()
+
+            # Stage 1: Chunk embedding
+            set_indexing_progress(current_stage="embedding_chunks", processed_docs=0)
             hipporag.index(docs=docs)
+
+            set_indexing_progress(current_stage="completed", processed_docs=len(docs))
             set_indexing_status("completed", f"Successfully indexed {len(docs)} documents")
         except Exception as e:
             logger.error(f"Indexing failed: {e}")
+            set_indexing_progress(current_stage="failed", error=str(e))
             set_indexing_status("failed", str(e))
 
-    background_tasks.add_task(run_indexing, request.docs)
+    background_tasks.add_task(run_indexing_with_progress, request.docs)
 
     return IndexResponse(
         status="accepted",
-        message=f"Started indexing {len(request.docs)} documents in background",
+        message=f"Started indexing {len(request.docs)} documents. Use /index/progress for real-time updates.",
         num_docs=len(request.docs)
+    )
+
+
+@router.post("/index/upload", response_model=IndexResponse, tags=["Indexing"])
+async def index_from_file(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Index documents from an uploaded file (async).
+
+    Supports .txt, .md, .json, .jsonl files.
+    For .txt/.md: each line or paragraph is a document.
+    For .json: expects array of strings or array of {content: str} objects.
+    For .jsonl: each line is a document or {content: str} object.
+
+    Use /index/progress SSE endpoint to track progress.
+    """
+
+    if get_indexing_status()["status"] == "indexing":
+        raise HTTPException(status_code=409, detail="Indexing already in progress")
+
+    # Read file content
+    content = await file.read()
+    filename = file.filename.lower()
+
+    try:
+        docs = []
+
+        if filename.endswith('.json'):
+            # JSON file - expect array of strings or {content: str} objects
+            data = json.loads(content.decode('utf-8'))
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, str):
+                        docs.append(item)
+                    elif isinstance(item, dict) and 'content' in item:
+                        docs.append(item['content'])
+            elif isinstance(data, dict) and 'content' in data:
+                docs.append(data['content'])
+            else:
+                raise ValueError("JSON must be array of strings or objects with 'content' field")
+
+        elif filename.endswith('.jsonl'):
+            # JSONL file - each line is a document
+            for line in content.decode('utf-8').strip().split('\n'):
+                line = line.strip()
+                if line:
+                    try:
+                        item = json.loads(line)
+                        if isinstance(item, str):
+                            docs.append(item)
+                        elif isinstance(item, dict) and 'content' in item:
+                            docs.append(item['content'])
+                    except json.JSONDecodeError:
+                        docs.append(line)  # Treat as plain text
+
+        else:
+            # .txt or .md file - split by double newlines (paragraphs) or single newlines
+            text = content.decode('utf-8')
+            # Split by double newlines first, then by single if too long
+            paragraphs = text.split('\n\n')
+            if len(paragraphs) == 1:
+                paragraphs = text.split('\n')
+
+            for p in paragraphs:
+                p = p.strip()
+                if p:
+                    docs.append(p)
+
+        if not docs:
+            raise HTTPException(status_code=400, detail="No valid documents found in file")
+
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text")
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    def run_indexing_with_progress(docs: List[str]):
+        try:
+            reset_indexing_progress()
+            set_indexing_progress(total_docs=len(docs), current_stage="starting")
+            set_indexing_status("indexing", f"Indexing {len(docs)} documents from file...")
+
+            hipporag = get_hipporag()
+            set_indexing_progress(current_stage="embedding_chunks", processed_docs=0)
+            hipporag.index(docs=docs)
+
+            set_indexing_progress(current_stage="completed", processed_docs=len(docs))
+            set_indexing_status("completed", f"Successfully indexed {len(docs)} documents")
+        except Exception as e:
+            logger.error(f"Indexing failed: {e}")
+            set_indexing_progress(current_stage="failed", error=str(e))
+            set_indexing_status("failed", str(e))
+
+    background_tasks.add_task(run_indexing_with_progress, docs)
+
+    return IndexResponse(
+        status="accepted",
+        message=f"Started indexing {len(docs)} documents from {file.filename}. Use /index/progress for real-time updates.",
+        num_docs=len(docs)
     )
 
 

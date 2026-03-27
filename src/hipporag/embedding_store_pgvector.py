@@ -1,10 +1,8 @@
 import numpy as np
 from typing import List, Dict, Optional, Tuple, Set
 import logging
-from copy import deepcopy
 import psycopg2
 from psycopg2.extras import execute_values
-from psycopg2 import sql
 import ast
 
 from .utils.misc_utils import compute_mdhash_id

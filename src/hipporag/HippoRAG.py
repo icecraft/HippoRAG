@@ -4,25 +4,18 @@ import logging
 from dataclasses import asdict
 from typing import List, Set, Dict, Tuple
 import numpy as np
-from collections import defaultdict
-from tqdm import tqdm
 
-import re
 import time
 
 from .llm import _get_llm_class, BaseLLM
 from .embedding_model import _get_embedding_model_class, BaseEmbeddingModel
 from .embedding_store import create_embedding_store
 from .information_extraction import OpenIE
-from .evaluation.retrieval_eval import RetrievalRecall
 from .evaluation.qa_eval import QAExactMatch, QAF1Score
 from .prompts.linking import get_query_instruction
 from .prompts.prompt_template_manager import PromptTemplateManager
 from .rerank import DSPyFilter
-from .utils.misc_utils import *
-from .utils.misc_utils import NerRawOutput, TripleRawOutput
-from .utils.embed_utils import retrieve_knn
-from .utils.typing import Triple
+from .utils.misc_utils import QuerySolution, NerRawOutput, TripleRawOutput, min_max_normalize, compute_mdhash_id
 from .utils.config_utils import BaseConfig
 
 # Import new modular components
@@ -776,7 +769,7 @@ class HippoRAG:
 
         for rank, f in enumerate(top_k_facts):
             subject_phrase = f[0].lower()
-            predicate_phrase = f[1].lower()
+            _predicate_phrase = f[1].lower()  # noqa: F841 - kept for readability
             object_phrase = f[2].lower()
             fact_score = query_fact_scores[
                 top_k_fact_indices[rank]] if query_fact_scores.ndim > 0 else query_fact_scores
@@ -932,7 +925,8 @@ class HippoRAG:
                 in the same order.
         """
 
-        if damping is None: damping = 0.5 # for potential compatibility
+        if damping is None:
+            damping = 0.5  # for potential compatibility
         reset_prob = np.where(np.isnan(reset_prob) | (reset_prob < 0), 0, reset_prob)
         pagerank_scores = self.graph.personalized_pagerank(
             vertices=range(len(self.node_name_to_vertex_idx)),

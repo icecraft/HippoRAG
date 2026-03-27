@@ -649,9 +649,7 @@ class DGraphAdapter(GraphInterface):
         idx_to_name = {}
         for uid, idx in self._uid_to_idx.items():
             idx_to_name[idx] = self._vertex_cache[uid].get("name")
-        
-        names_ordered = [idx_to_name.get(i) for i in range(n) if idx_to_name.get(i) is not None]
-        
+
         G = nx.DiGraph() if self._directed else nx.Graph()
         for v in self._vertex_cache.values():
             name = v.get("name")

@@ -152,7 +152,7 @@ class GraphManager:
         graph_builder.add_new_nodes()
         graph_builder.add_new_edges()
 
-        logger.info(f"Graph construction completed!")
+        logger.info("Graph construction completed!")
         logger.info(self.get_graph_info())
 
 

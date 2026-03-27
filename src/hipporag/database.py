@@ -10,9 +10,8 @@
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict
 import psycopg2
-from psycopg2.extras import execute_values
 
 logger = logging.getLogger(__name__)
 

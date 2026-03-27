@@ -1,10 +1,10 @@
-import os
-
 from ..utils.logging_utils import get_logger
 from ..utils.config_utils import BaseConfig
 
 from .openai_gpt import CacheOpenAI
-from .base import BaseLLM
+from .base import BaseLLM as BaseLLM
+
+__all__ = ["CacheOpenAI", "BaseLLM"]
 
 
 logger = get_logger(__name__)
