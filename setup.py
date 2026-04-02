@@ -26,7 +26,8 @@ setuptools.setup(
         "boto3", # No version specified
         "filelock",  # No version specified
         "psycopg2-binary>=2.9.0",  # For pgvector support
-        "pydgraph>=25.0.0",  # For dgraph graph storage,
-        "fastapi>=0.130"
+        "pydgraph>=25.0.0",  # For dgraph graph storage
+        "fastapi>=0.130",
+        "python-multipart>=0.0.9",  # Required by FastAPI for Form/File uploads
     ]
 )

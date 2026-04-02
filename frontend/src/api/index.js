@@ -14,8 +14,9 @@ api.interceptors.response.use(
   }
 );
 
-// Health
+// Health & indexing status
 export const checkHealth = () => api.get('/health');
+export const getIndexingStatus = () => api.get('/status');
 
 // Books
 export const getBooks = () => api.get('/books');
@@ -32,20 +33,28 @@ export const createProgressEventSource = () => {
   return new EventSource(`${baseURL}/index/progress`);
 };
 
-// File upload for indexing
+// File upload for indexing (global corpus, not book-scoped)
 export const uploadFile = (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
   return api.post('/index/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress,
-    timeout: 300000, // 5 minutes for large files
+    timeout: 600000, // 10 minutes for large files
   });
 };
 
-// Async document indexing (returns immediately, use SSE for progress)
-export const indexDocumentsAsync = (book_id, docs) =>
-  api.post('/book/index', { book_id, docs });
+/** Multipart upload into a book — avoids huge JSON bodies for large files */
+export const uploadBookIndexFile = (book_id, file, onUploadProgress) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('book_id', book_id);
+  return api.post('/book/index/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress,
+    timeout: 600000,
+  });
+};
 
 // Businesses
 export const getBusinesses = () => api.get('/businesses');

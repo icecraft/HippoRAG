@@ -9,7 +9,7 @@ import json
 import logging
 from typing import List, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 
 from .models import (
@@ -37,6 +37,54 @@ from .dependencies import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def parse_upload_bytes_to_docs(content: bytes, filename: str) -> List[str]:
+    """
+    Parse uploaded file bytes into document strings (same rules as POST /index/upload).
+
+    Raises UnicodeDecodeError, json.JSONDecodeError, or ValueError on invalid input.
+    """
+    fn = (filename or "unknown.txt").lower()
+    docs: List[str] = []
+
+    if fn.endswith(".json"):
+        data = json.loads(content.decode("utf-8"))
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, str):
+                    docs.append(item)
+                elif isinstance(item, dict) and "content" in item:
+                    docs.append(item["content"])
+        elif isinstance(data, dict) and "content" in data:
+            docs.append(data["content"])
+        else:
+            raise ValueError("JSON must be array of strings or objects with 'content' field")
+
+    elif fn.endswith(".jsonl"):
+        for line in content.decode("utf-8").strip().split("\n"):
+            line = line.strip()
+            if line:
+                try:
+                    item = json.loads(line)
+                    if isinstance(item, str):
+                        docs.append(item)
+                    elif isinstance(item, dict) and "content" in item:
+                        docs.append(item["content"])
+                except json.JSONDecodeError:
+                    docs.append(line)
+
+    else:
+        text = content.decode("utf-8")
+        paragraphs = text.split("\n\n")
+        if len(paragraphs) == 1:
+            paragraphs = text.split("\n")
+        for p in paragraphs:
+            p = p.strip()
+            if p:
+                docs.append(p)
+
+    return docs
 
 
 # ============== Health and Status Endpoints ==============
@@ -138,7 +186,10 @@ async def index_documents(request: IndexRequest, background_tasks: BackgroundTas
             hipporag = get_hipporag()
 
             # Stage 1: Chunk embedding
-            set_indexing_progress(current_stage="embedding_chunks", processed_docs=0)
+            set_indexing_progress(
+                current_stage="embedding_chunks",
+                processed_docs=1 if len(docs) > 0 else 0,
+            )
             hipporag.index(docs=docs)
 
             set_indexing_progress(current_stage="completed", processed_docs=len(docs))
@@ -176,63 +227,20 @@ async def index_from_file(
     if get_indexing_status()["status"] == "indexing":
         raise HTTPException(status_code=409, detail="Indexing already in progress")
 
-    # Read file content
     content = await file.read()
-    filename = file.filename.lower()
+    filename = file.filename or "unknown.txt"
 
     try:
-        docs = []
-
-        if filename.endswith('.json'):
-            # JSON file - expect array of strings or {content: str} objects
-            data = json.loads(content.decode('utf-8'))
-            if isinstance(data, list):
-                for item in data:
-                    if isinstance(item, str):
-                        docs.append(item)
-                    elif isinstance(item, dict) and 'content' in item:
-                        docs.append(item['content'])
-            elif isinstance(data, dict) and 'content' in data:
-                docs.append(data['content'])
-            else:
-                raise ValueError("JSON must be array of strings or objects with 'content' field")
-
-        elif filename.endswith('.jsonl'):
-            # JSONL file - each line is a document
-            for line in content.decode('utf-8').strip().split('\n'):
-                line = line.strip()
-                if line:
-                    try:
-                        item = json.loads(line)
-                        if isinstance(item, str):
-                            docs.append(item)
-                        elif isinstance(item, dict) and 'content' in item:
-                            docs.append(item['content'])
-                    except json.JSONDecodeError:
-                        docs.append(line)  # Treat as plain text
-
-        else:
-            # .txt or .md file - split by double newlines (paragraphs) or single newlines
-            text = content.decode('utf-8')
-            # Split by double newlines first, then by single if too long
-            paragraphs = text.split('\n\n')
-            if len(paragraphs) == 1:
-                paragraphs = text.split('\n')
-
-            for p in paragraphs:
-                p = p.strip()
-                if p:
-                    docs.append(p)
-
-        if not docs:
-            raise HTTPException(status_code=400, detail="No valid documents found in file")
-
+        docs = parse_upload_bytes_to_docs(content, filename)
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text")
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No valid documents found in file")
 
     def run_indexing_with_progress(docs: List[str]):
         try:
@@ -241,7 +249,10 @@ async def index_from_file(
             set_indexing_status("indexing", f"Indexing {len(docs)} documents from file...")
 
             hipporag = get_hipporag()
-            set_indexing_progress(current_stage="embedding_chunks", processed_docs=0)
+            set_indexing_progress(
+                current_stage="embedding_chunks",
+                processed_docs=1 if len(docs) > 0 else 0,
+            )
             hipporag.index(docs=docs)
 
             set_indexing_progress(current_stage="completed", processed_docs=len(docs))
@@ -537,6 +548,137 @@ async def question_answering_dpr(request: DPRQARequest):
 
 
 # ============== Multi-Tenancy: Book Endpoints ==============
+
+@router.post("/book/index", response_model=BookIndexResponse, tags=["Book Indexing"])
+async def index_book_async(request: BookIndexRequest, background_tasks: BackgroundTasks):
+    """
+    Index documents into a specific book (async).
+
+    Returns immediately; use GET /index/progress (SSE) for progress, same as POST /index.
+    """
+    if get_indexing_status()["status"] == "indexing":
+        raise HTTPException(status_code=409, detail="Indexing already in progress")
+
+    if not request.docs:
+        raise HTTPException(status_code=400, detail="No documents provided")
+
+    if not request.book_id:
+        raise HTTPException(status_code=400, detail="book_id is required")
+
+    book_id = request.book_id
+    docs = request.docs
+
+    def run_book_indexing():
+        try:
+            reset_indexing_progress()
+            set_indexing_progress(total_docs=len(docs), current_stage="starting")
+            set_indexing_status("indexing", f"Indexing {len(docs)} documents into book {book_id}...")
+
+            manager = get_multi_tenancy_manager()
+            set_indexing_progress(
+                current_stage="embedding_chunks",
+                processed_docs=1 if len(docs) > 0 else 0,
+            )
+            result = manager.index_book(book_id, docs)
+
+            if result.get("status") == "failed":
+                set_indexing_progress(current_stage="failed", error=result.get("message", "unknown"))
+                set_indexing_status("failed", result["message"])
+            else:
+                set_indexing_progress(current_stage="completed", processed_docs=len(docs))
+                set_indexing_status("completed", result["message"])
+        except Exception as e:
+            logger.error(f"Book indexing failed: {e}")
+            set_indexing_progress(current_stage="failed", error=str(e))
+            set_indexing_status("failed", str(e))
+
+    background_tasks.add_task(run_book_indexing)
+
+    return BookIndexResponse(
+        status="accepted",
+        message=(
+            f"Started indexing {len(docs)} documents into book {book_id}. "
+            "Use /index/progress for real-time updates."
+        ),
+        book_id=book_id,
+        num_docs=len(docs),
+    )
+
+
+@router.post("/book/index/upload", response_model=BookIndexResponse, tags=["Book Indexing"])
+async def index_book_from_file(
+    background_tasks: BackgroundTasks,
+    book_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """
+    Index documents from an uploaded file into a specific book (async).
+
+    Same file formats as POST /index/upload. Prefer this over POST /book/index with a JSON
+    body for large files — avoids serializing millions of strings in the client request.
+    """
+    if get_indexing_status()["status"] == "indexing":
+        raise HTTPException(status_code=409, detail="Indexing already in progress")
+
+    if not book_id.strip():
+        raise HTTPException(status_code=400, detail="book_id is required")
+
+    content = await file.read()
+    filename = file.filename or "unknown.txt"
+
+    try:
+        docs = parse_upload_bytes_to_docs(content, filename)
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text")
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No valid documents found in file")
+
+    book_id_clean = book_id.strip()
+
+    def run_book_indexing():
+        try:
+            reset_indexing_progress()
+            set_indexing_progress(total_docs=len(docs), current_stage="starting")
+            set_indexing_status(
+                "indexing",
+                f"Indexing {len(docs)} documents into book {book_id_clean} (from {filename})...",
+            )
+
+            manager = get_multi_tenancy_manager()
+            set_indexing_progress(
+                current_stage="embedding_chunks",
+                processed_docs=1 if len(docs) > 0 else 0,
+            )
+            result = manager.index_book(book_id_clean, docs)
+
+            if result.get("status") == "failed":
+                set_indexing_progress(current_stage="failed", error=result.get("message", "unknown"))
+                set_indexing_status("failed", result["message"])
+            else:
+                set_indexing_progress(current_stage="completed", processed_docs=len(docs))
+                set_indexing_status("completed", result["message"])
+        except Exception as e:
+            logger.error(f"Book indexing failed: {e}")
+            set_indexing_progress(current_stage="failed", error=str(e))
+            set_indexing_status("failed", str(e))
+
+    background_tasks.add_task(run_book_indexing)
+
+    return BookIndexResponse(
+        status="accepted",
+        message=(
+            f"Started indexing {len(docs)} documents into book {book_id_clean} from {filename}. "
+            "Use /index/progress for real-time updates."
+        ),
+        book_id=book_id_clean,
+        num_docs=len(docs),
+    )
+
 
 @router.post("/book/index/sync", response_model=BookIndexResponse, tags=["Book Indexing"])
 async def index_book_sync(request: BookIndexRequest):

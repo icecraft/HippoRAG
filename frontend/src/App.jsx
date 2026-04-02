@@ -8,6 +8,7 @@ import Books from './pages/Books';
 import Businesses from './pages/Businesses';
 import BusinessDetail from './pages/Businesses/Detail';
 import Ingest from './pages/Ingest';
+import IngestStatus from './pages/IngestStatus';
 import Query from './pages/Query';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
             <Route path="/businesses" element={<Businesses />} />
             <Route path="/businesses/:id" element={<BusinessDetail />} />
             <Route path="/ingest" element={<Ingest />} />
+            <Route path="/ingest/status" element={<IngestStatus />} />
             <Route path="/query" element={<Query />} />
           </Routes>
         </AppLayout>

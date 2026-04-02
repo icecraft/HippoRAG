@@ -7,6 +7,7 @@ import {
   TeamOutlined,
   UploadOutlined,
   SearchOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons';
 
 const { Sider, Content, Header } = Layout;
@@ -36,6 +37,11 @@ const menuItems = [
     key: '/ingest',
     icon: <UploadOutlined />,
     label: '文档上传',
+  },
+  {
+    key: '/ingest/status',
+    icon: <MonitorOutlined />,
+    label: '索引任务',
   },
 ];
 
@@ -76,7 +82,7 @@ const AppLayout = ({ children }) => {
           borderBottom: '1px solid #f0f0f0',
         }}>
           <h2 style={{ margin: 0, lineHeight: '64px' }}>
-            {menuItems.find(item => item.key === location.pathname)?.label || 'HippoRAG'}
+            {menuItems.find((item) => item.key === location.pathname)?.label || 'HippoRAG'}
           </h2>
         </Header>
         <Content style={{
