@@ -10,6 +10,9 @@ from .database import init_embedding_table_with_conn, _create_vector_index_with_
 
 logger = logging.getLogger(__name__)
 
+# Chunk size for "WHERE hash_id IN (...)" — avoids huge queries and planner issues
+_HASH_ID_LOOKUP_CHUNK = 5000
+
 
 class PgVectorEmbeddingStore:
     """
@@ -172,25 +175,60 @@ class PgVectorEmbeddingStore:
         if not nodes_dict:
             return {}
         
-        # Check which hash_ids exist
+        hash_ids = list(nodes_dict.keys())
+        existing: Set[str] = set()
+
+        # Chunked IN queries — a single huge IN (...) is slow and can exceed DB limits
         with self.conn.cursor() as cur:
-            hash_ids = list(nodes_dict.keys())
-            if not hash_ids:
-                return {}
-            
-            placeholders = ','.join(['%s'] * len(hash_ids))
-            cur.execute(
-                f"SELECT hash_id FROM {self.table_name} WHERE hash_id IN ({placeholders})",
-                hash_ids
-            )
-            existing = {row[0] for row in cur.fetchall()}
-        
-        # Return only missing ones
-        missing = {h: v for h, v in nodes_dict.items() if h not in existing}
+            for i in range(0, len(hash_ids), _HASH_ID_LOOKUP_CHUNK):
+                chunk = hash_ids[i:i + _HASH_ID_LOOKUP_CHUNK]
+                placeholders = ','.join(['%s'] * len(chunk))
+                cur.execute(
+                    f"SELECT hash_id FROM {self.table_name} WHERE hash_id IN ({placeholders})",
+                    chunk,
+                )
+                existing.update(row[0] for row in cur.fetchall())
+
+        missing = {h: nodes_dict[h] for h in hash_ids if h not in existing}
         return missing
-    
+
+    def _ensure_embedding_dim_matches(self, embeddings: np.ndarray) -> None:
+        """Validate or migrate table dimension using the first non-empty batch."""
+        if embeddings.size == 0:
+            return
+        if embeddings.ndim > 1:
+            actual_dim = embeddings.shape[-1]
+        else:
+            actual_dim = len(embeddings) if hasattr(embeddings, '__len__') else int(embeddings.shape[0])
+
+        if actual_dim == self.embedding_dim:
+            return
+
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+            count = cur.fetchone()[0]
+
+        if count == 0:
+            logger.warning(
+                f"Embedding dimension mismatch: table expects {self.embedding_dim}, but got {actual_dim}. "
+                "Updating table structure..."
+            )
+            self._update_table_dimension(actual_dim)
+            self.embedding_dim = actual_dim
+        else:
+            raise ValueError(
+                f"Embedding dimension mismatch: table {self.table_name} expects {self.embedding_dim} dimensions, "
+                f"but embedding model produces {actual_dim} dimensions. Table already contains {count} records. "
+                f"Please use force_index_from_scratch=True to rebuild."
+            )
+
     def insert_strings(self, texts: List[str]):
-        """Insert texts and their embeddings."""
+        """
+        Insert texts and their embeddings.
+
+        Processes in batches of ``self.batch_size``: encode → INSERT → COMMIT each batch so that
+        large ingests show rows in PostgreSQL incrementally instead of only after all embeddings finish.
+        """
         missing_dict = self.get_missing_string_hash_ids(texts)
         
         if not missing_dict:
@@ -199,65 +237,53 @@ class PgVectorEmbeddingStore:
         
         missing_ids = list(missing_dict.keys())
         texts_to_encode = [missing_dict[h]['content'] for h in missing_ids]
-        
-        logger.info(f"Encoding {len(texts_to_encode)} new texts")
-        embeddings = self.embedding_model.batch_encode(texts_to_encode)
-        
-        # Ensure embeddings are numpy arrays
-        if not isinstance(embeddings, np.ndarray):
-            embeddings = np.array(embeddings)
-        
-        # Check actual embedding dimension and update if needed
-        if embeddings.size > 0:
-            # Get actual dimension from first embedding
-            if embeddings.ndim > 1:
-                actual_dim = embeddings.shape[-1]
-            elif len(embeddings) > 0:
-                actual_dim = len(embeddings[0]) if hasattr(embeddings[0], '__len__') else 1
-            else:
-                actual_dim = embeddings.shape[0] if embeddings.ndim > 0 else 1
-            
-            if actual_dim != self.embedding_dim:
-                # Check if table is empty
-                with self.conn.cursor() as cur:
-                    cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
-                    count = cur.fetchone()[0]
-                
-                if count == 0:
-                    # Table is empty, safe to update
-                    logger.warning(f"Embedding dimension mismatch: table expects {self.embedding_dim}, but got {actual_dim}. Updating table structure...")
-                    self._update_table_dimension(actual_dim)
-                    self.embedding_dim = actual_dim
-                else:
-                    # Table has data, check if existing data matches
-                    raise ValueError(
-                        f"Embedding dimension mismatch: table {self.table_name} expects {self.embedding_dim} dimensions, "
-                        f"but embedding model produces {actual_dim} dimensions. Table already contains {count} records. "
-                        f"Please use force_index_from_scratch=True to rebuild."
-                    )
-        
-        # Insert into database
+        total = len(texts_to_encode)
+        bs = max(1, int(self.batch_size))
+
+        logger.info(
+            f"Inserting {total} new texts into {self.table_name} in batches of {bs} "
+            f"(incremental commits — rows appear in PG as each batch completes)"
+        )
+
         try:
-            with self.conn.cursor() as cur:
-                data = [
-                    (hash_id, content, embedding.tolist(), self.book_id)
-                    for hash_id, content, embedding in zip(missing_ids, texts_to_encode, embeddings)
-                ]
-                execute_values(
-                    cur,
-                    f"""
-                    INSERT INTO {self.table_name} (hash_id, content, embedding, book_id)
-                    VALUES %s
-                    ON CONFLICT (hash_id) DO NOTHING
-                    """,
-                    data
-                )
-                self.conn.commit()
+            dim_checked = False
+            for start in range(0, total, bs):
+                end = min(start + bs, total)
+                batch_ids = missing_ids[start:end]
+                batch_texts = texts_to_encode[start:end]
 
-            # Ensure index exists after insert
+                embeddings = self.embedding_model.batch_encode(batch_texts)
+                if not isinstance(embeddings, np.ndarray):
+                    embeddings = np.array(embeddings)
+                if embeddings.ndim == 1:
+                    embeddings = embeddings.reshape(1, -1)
+
+                if not dim_checked:
+                    self._ensure_embedding_dim_matches(embeddings)
+                    dim_checked = True
+
+                with self.conn.cursor() as cur:
+                    data = [
+                        (hash_id, content, embedding.tolist(), self.book_id)
+                        for hash_id, content, embedding in zip(batch_ids, batch_texts, embeddings)
+                    ]
+                    execute_values(
+                        cur,
+                        f"""
+                        INSERT INTO {self.table_name} (hash_id, content, embedding, book_id)
+                        VALUES %s
+                        ON CONFLICT (hash_id) DO NOTHING
+                        """,
+                        data,
+                    )
+                    self.conn.commit()
+
+                batch_num = start // bs
+                if batch_num == 0 or batch_num % 50 == 0 or end >= total:
+                    logger.info(f"embed+insert progress: {end}/{total} rows committed to {self.table_name}")
+
             self._ensure_index()
-
-            logger.info(f"Inserted {len(missing_ids)} records into {self.table_name}")
+            logger.info(f"Finished inserting {total} records into {self.table_name}")
         except Exception as e:
             logger.error(f"Error inserting records: {e}")
             self.conn.rollback()
