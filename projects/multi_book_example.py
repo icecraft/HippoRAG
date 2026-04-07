@@ -258,7 +258,7 @@ def main():
     print("Unbound 'literary_quotes' from 'literature_research'")
 
     books = manager.get_business_books("literature_research")
-    print(f"\nBooks now bound to 'literature_research':")
+    print("\nBooks now bound to 'literature_research':")
     for book in books:
         print(f"  - {book['book_id']}")
 

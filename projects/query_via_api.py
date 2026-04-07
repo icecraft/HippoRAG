@@ -18,8 +18,6 @@ Usage:
     python query_via_api.py --query_file queries.txt --output_file results.txt --business_id my_business
 """
 
-import os
-import json
 import argparse
 import logging
 from typing import List, Optional

@@ -172,11 +172,8 @@ const Ingest = () => {
           return;
         }
 
-        const { total_docs, processed_docs, current_stage } = data.progress || {};
-        let pct = STAGE_WEIGHT[current_stage] ?? 55;
-        if (total_docs > 0 && processed_docs > 0) {
-          pct = 45 + Math.round((processed_docs / total_docs) * 55);
-        }
+        const { current_stage } = data.progress || {};
+        const pct = STAGE_WEIGHT[current_stage] ?? 55;
         setProgress(Math.min(99, pct));
       } catch (err) {
         console.error('SSE parse error:', err);

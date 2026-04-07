@@ -2,7 +2,7 @@ import json
 import os
 import logging
 from dataclasses import asdict
-from typing import List, Set, Dict, Tuple
+from typing import List, Set, Dict, Tuple, Callable, Optional
 import numpy as np
 
 import time
@@ -232,7 +232,7 @@ class HippoRAG:
         """
         return self.graph_manager.initialize_graph()
 
-    def index(self, docs: List[str]):
+    def index(self, docs: List[str], progress_callback: Optional[Callable] = None):
         """
         Indexes the given documents based on the HippoRAG 2 framework which generates an OpenIE knowledge graph
         based on the given documents and encodes passages, entities and facts separately for later retrieval.
@@ -240,8 +240,10 @@ class HippoRAG:
         Parameters:
             docs : List[str]
                 A list of documents to be indexed.
+            progress_callback : Optional[Callable]
+                Optional callback invoked at each indexing stage.
         """
-        self.indexer.index(docs)
+        self.indexer.index(docs, progress_callback=progress_callback)
 
     def delete(self, docs_to_delete: List[str]):
         """

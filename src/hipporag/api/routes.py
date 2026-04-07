@@ -185,12 +185,13 @@ async def index_documents(request: IndexRequest, background_tasks: BackgroundTas
 
             hipporag = get_hipporag()
 
-            # Stage 1: Chunk embedding
-            set_indexing_progress(
-                current_stage="embedding_chunks",
-                processed_docs=1 if len(docs) > 0 else 0,
-            )
-            hipporag.index(docs=docs)
+            def on_progress(stage: str, current: int, total: int):
+                set_indexing_progress(
+                    current_stage=stage,
+                    processed_docs=current,
+                )
+
+            hipporag.index(docs=docs, progress_callback=on_progress)
 
             set_indexing_progress(current_stage="completed", processed_docs=len(docs))
             set_indexing_status("completed", f"Successfully indexed {len(docs)} documents")
@@ -249,11 +250,14 @@ async def index_from_file(
             set_indexing_status("indexing", f"Indexing {len(docs)} documents from file...")
 
             hipporag = get_hipporag()
-            set_indexing_progress(
-                current_stage="embedding_chunks",
-                processed_docs=1 if len(docs) > 0 else 0,
-            )
-            hipporag.index(docs=docs)
+
+            def on_progress(stage: str, current: int, total: int):
+                set_indexing_progress(
+                    current_stage=stage,
+                    processed_docs=current,
+                )
+
+            hipporag.index(docs=docs, progress_callback=on_progress)
 
             set_indexing_progress(current_stage="completed", processed_docs=len(docs))
             set_indexing_status("completed", f"Successfully indexed {len(docs)} documents")

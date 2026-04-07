@@ -16,7 +16,6 @@ Usage:
     python ingest_via_api.py --docs "Doc 1" "Doc 2" --book_id my_book_001
 """
 
-import os
 import json
 import argparse
 import logging

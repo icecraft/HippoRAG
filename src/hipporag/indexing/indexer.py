@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict
+from typing import List, Dict, Callable, Optional
 from ..utils.config_utils import BaseConfig
 from ..embedding_store import EmbeddingStore
 from ..information_extraction import OpenIE
@@ -61,7 +61,7 @@ class Indexer:
         self.node_to_node_stats = node_to_node_stats
         self.ent_node_to_chunk_ids = ent_node_to_chunk_ids
     
-    def index(self, docs: List[str]):
+    def index(self, docs: List[str], progress_callback: Optional[Callable[[str, int, int], None]] = None):
         """
         Indexes the given documents based on the HippoRAG 2 framework which generates an OpenIE knowledge graph
         based on the given documents and encodes passages, entities and facts separately for later retrieval.
@@ -69,8 +69,14 @@ class Indexer:
         Parameters:
             docs : List[str]
                 A list of documents to be indexed.
+            progress_callback : Optional[Callable[[stage: str, current: int, total: int], None]]
+                Optional callback invoked at each stage with (stage_name, current_step, total_steps).
         """
+        total_docs = len(docs)
         logger.info("Indexing Documents")
+
+        if progress_callback:
+            progress_callback("embedding_chunks", 1, 6)
 
         logger.info("Performing OpenIE")
 
@@ -87,8 +93,11 @@ class Indexer:
         if self.global_config.save_openie:
             self.openie_manager.save_openie_results(all_openie_info)
 
+        if progress_callback:
+            progress_callback("openie", 2, 6)
+
         ner_results_dict, triple_results_dict = reformat_openie_results(all_openie_info)
-        
+
         # Filter to only include chunks that exist in chunk_to_rows
         # This handles cases where OpenIE results exist for chunks that are no longer in the database
         chunk_ids_in_store = set(chunk_to_rows.keys())
@@ -105,11 +114,20 @@ class Indexer:
         entity_nodes, chunk_triple_entities = extract_entity_nodes(chunk_triples)
         facts = flatten_facts(chunk_triples)
 
+        if progress_callback:
+            progress_callback("embedding_entities", 3, 6)
+
         logger.info("Encoding Entities")
         self.entity_embedding_store.insert_strings(entity_nodes)
 
+        if progress_callback:
+            progress_callback("embedding_facts", 4, 6)
+
         logger.info("Encoding Facts")
         self.fact_embedding_store.insert_strings([str(fact) for fact in facts])
+
+        if progress_callback:
+            progress_callback("graph_construction", 5, 6)
 
         logger.info("Constructing Graph")
 
@@ -125,6 +143,9 @@ class Indexer:
 
             self.graph_manager.augment_graph(self.graph_builder)
             self.graph_manager.save_graph()
+
+        if progress_callback:
+            progress_callback("completed", 6, 6)
     
     def delete(self, 
                docs_to_delete: List[str],

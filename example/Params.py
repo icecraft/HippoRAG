@@ -1,10 +1,8 @@
 import time
-from typing import Any, Dict, List
 
 from nebula3.gclient.net import ConnectionPool
 from nebula3.Config import Config
 from nebula3.common import ttypes
-from nebula3.data.ResultSet import ResultSet
 
 # define a config
 config = Config()

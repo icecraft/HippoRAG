@@ -1,9 +1,12 @@
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Dict, Any, List, TypedDict, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
+
+from json_repair import repair_json
 
 from ..prompts import PromptTemplateManager
 from ..utils.logging_utils import get_logger
@@ -12,6 +15,21 @@ from ..utils.misc_utils import TripleRawOutput, NerRawOutput
 from ..llm.openai_gpt import CacheOpenAI
 
 logger = get_logger(__name__)
+
+_DEBUG_JSON_DIR = os.path.join(os.getcwd(), "debug_json")
+
+
+def _dump_failed_json(source: str, raw_text: str, error: str):
+    """Dump failed JSON text to file for debugging."""
+    os.makedirs(_DEBUG_JSON_DIR, exist_ok=True)
+    import time
+    filename = f"{source}_{int(time.time() * 1000)}.txt"
+    filepath = os.path.join(_DEBUG_JSON_DIR, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(f"# Error: {error}\n")
+        f.write(f"# Source: {source}\n\n")
+        f.write(raw_text)
+    logger.info(f"Dumped failed JSON to {filepath}")
 
 
 class ChunkInfo(TypedDict):
@@ -33,11 +51,18 @@ def _extract_ner_from_response(real_response):
     if match is None:
         # If pattern doesn't match, return an empty list
         return []
+    json_str = match.group()
     try:
-        return json.loads(match.group())["named_entities"]
+        return json.loads(json_str)["named_entities"]
     except json.JSONDecodeError as e:
         logger.warning(f"Failed to parse JSON from NER response: {e}")
-        return []
+        _dump_failed_json("ner", json_str, str(e))
+        # Attempt repair
+        try:
+            repaired = repair_json(json_str)
+            return json.loads(repaired)["named_entities"]
+        except Exception:
+            return []
 
 
 class OpenIE:
@@ -89,11 +114,18 @@ class OpenIE:
             if match is None:
                 # If pattern doesn't match, return an empty list
                 return []
+            json_str = match.group()
             try:
-                return json.loads(match.group())["triples"]
+                return json.loads(json_str)["triples"]
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON from triple extraction response: {e}")
-                return []
+                _dump_failed_json("triple", json_str, str(e))
+                # Attempt repair
+                try:
+                    repaired = repair_json(json_str)
+                    return json.loads(repaired)["triples"]
+                except Exception:
+                    return []
 
         # PREPROCESSING
         messages = self.prompt_template_manager.render(

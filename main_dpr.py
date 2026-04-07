@@ -8,11 +8,9 @@ try:
 except ImportError:
     pass
 
-from src.hipporag.HippoRAG import HippoRAG
 from src.hipporag.StandardRAG import StandardRAG
 from src.hipporag.utils.misc_utils import string_to_bool
 from src.hipporag.utils.config_utils import BaseConfig
-from src.hipporag.embedding_store import EmbeddingStore
 
 import argparse
 
