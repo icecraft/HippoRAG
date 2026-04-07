@@ -57,11 +57,21 @@ class GraphManager:
         Returns:
             GraphInterface: A pre-loaded or newly initialized graph.
         """
-        graph_library = getattr(self.global_config, 'graph_library', 'dgraph').lower()
+        graph_library = getattr(self.global_config, 'graph_library', 'igraph').lower()
 
         if not self.global_config.force_index_from_scratch and os.path.exists(self._graph_save_filename):
             try:
-                if graph_library == 'dgraph':
+                if graph_library == 'igraph':
+                    from .graph_adapter_igraph import IGraphAdapter
+                    preloaded = IGraphAdapter.load(
+                        self._graph_save_filename,
+                        directed=self.global_config.is_directed_graph
+                    )
+                    logger.info(
+                        f"Loaded graph from {self._graph_save_filename} with {preloaded.vcount()} nodes, {preloaded.ecount()} edges"
+                    )
+                    return preloaded
+                elif graph_library == 'dgraph':
                     from .graph_adapter_dgraph import DGraphAdapter
                     conn = getattr(self.global_config, 'dgraph_config', None) or {"host": "localhost", "port": 9080}
                     preloaded = DGraphAdapter.load(
@@ -75,7 +85,7 @@ class GraphManager:
                     return preloaded
             except Exception as e:
                 logger.warning(f"Failed to load graph from file: {e}. Creating new graph.")
-        
+
         return create_graph(self.global_config, directed=self.global_config.is_directed_graph)
     
     def save_graph(self):

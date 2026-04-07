@@ -69,8 +69,8 @@ class MultiTenancyManager:
             embedding_model_name=self.base_config.embedding_model_name,
             embedding_base_url=self.base_config.embedding_base_url,
             embedding_batch_size=self.base_config.embedding_batch_size,
-            # Copy DGraph settings (shared across books)
-            graph_library="dgraph",
+            # Copy graph library settings
+            graph_library=self.base_config.graph_library,
             dgraph_config=self.base_config.dgraph_config,
             # Copy pgvector settings
             use_pgvector=True,

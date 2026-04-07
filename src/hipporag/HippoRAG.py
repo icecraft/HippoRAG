@@ -929,12 +929,7 @@ class HippoRAG:
             damping = 0.5  # for potential compatibility
         reset_prob = np.where(np.isnan(reset_prob) | (reset_prob < 0), 0, reset_prob)
         pagerank_scores = self.graph.personalized_pagerank(
-            vertices=range(len(self.node_name_to_vertex_idx)),
-            damping=damping,
-            directed=False,
-            weights='weight',
-            reset=reset_prob,
-            implementation='prpack'
+            reset_prob, damping=damping, weights='weight'
         )
 
         doc_scores = np.array([pagerank_scores[idx] for idx in self.passage_node_idxs])

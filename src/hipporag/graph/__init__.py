@@ -3,23 +3,23 @@ from .graph_builder import GraphBuilder
 from .graph_interface import GraphInterface
 from .graph_factory import create_graph, wrap_graph
 
+__all__ = [
+    'GraphManager',
+    'create_graph_manager',
+    'GraphBuilder',
+    'GraphInterface',
+    'create_graph',
+    'wrap_graph',
+]
+
+try:
+    from .graph_adapter_igraph import IGraphAdapter
+    __all__.append('IGraphAdapter')
+except ImportError:
+    pass
+
 try:
     from .graph_adapter_dgraph import DGraphAdapter
-    __all__ = [
-        'GraphManager',
-        'create_graph_manager',
-        'GraphBuilder',
-        'GraphInterface',
-        'create_graph',
-        'wrap_graph',
-        'DGraphAdapter'
-    ]
+    __all__.append('DGraphAdapter')
 except ImportError:
-    __all__ = [
-        'GraphManager',
-        'create_graph_manager',
-        'GraphBuilder',
-        'GraphInterface',
-        'create_graph',
-        'wrap_graph'
-    ]
+    pass

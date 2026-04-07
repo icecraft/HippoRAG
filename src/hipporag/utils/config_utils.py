@@ -177,9 +177,9 @@ class BaseConfig:
     )
     
     # Graph library selection
-    graph_library: Literal["dgraph"] = field(
-        default="dgraph",
-        metadata={"help": "Graph library to use: 'dgraph' (distributed graph database)."}
+    graph_library: Literal["dgraph", "igraph"] = field(
+        default="igraph",
+        metadata={"help": "Graph library to use: 'igraph' (high-performance in-memory, recommended) or 'dgraph' (distributed graph database)."}
     )
     dgraph_config: Optional[dict] = field(
         default=None,

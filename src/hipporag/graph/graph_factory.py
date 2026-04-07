@@ -21,17 +21,19 @@ def create_graph(global_config: BaseConfig, directed: bool = True) -> GraphInter
     Returns:
         GraphInterface instance (DGraphAdapter)
     """
-    graph_library = getattr(global_config, 'graph_library', 'dgraph').lower()
+    graph_library = getattr(global_config, 'graph_library', 'igraph').lower()
 
-    if graph_library == 'dgraph':
+    if graph_library == 'igraph':
+        from .graph_adapter_igraph import IGraphAdapter
+        return IGraphAdapter.create(directed=directed)
+    elif graph_library == 'dgraph':
         from .graph_adapter_dgraph import DGraphAdapter
         connection_config = getattr(global_config, 'dgraph_config', None)
         return DGraphAdapter.create(directed=directed, connection_config=connection_config)
 
-    logger.warning(f"Unknown graph_library '{graph_library}', defaulting to dgraph")
-    from .graph_adapter_dgraph import DGraphAdapter
-    connection_config = getattr(global_config, 'dgraph_config', None)
-    return DGraphAdapter.create(directed=directed, connection_config=connection_config)
+    logger.warning(f"Unknown graph_library '{graph_library}', defaulting to igraph")
+    from .graph_adapter_igraph import IGraphAdapter
+    return IGraphAdapter.create(directed=directed)
 
 
 def wrap_graph(graph, global_config: Optional[BaseConfig] = None) -> GraphInterface:

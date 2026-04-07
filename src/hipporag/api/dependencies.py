@@ -133,8 +133,8 @@ def get_hipporag() -> HippoRAG:
             llm_name=os.getenv("HIPPORAG_LLM_MODEL", "gpt-4o-mini"),
             embedding_model_name=os.getenv("HIPPORAG_EMBEDDING_MODEL", "text-embedding-3-small"),
             embedding_base_url=embedding_base_url,
-            # DGraph configuration
-            graph_library="dgraph",
+            # Graph library selection (igraph recommended, dgraph for distributed)
+            graph_library=os.getenv("GRAPH_LIBRARY", "igraph"),
             dgraph_config=dgraph_config,
             # pgvector configuration
             use_pgvector=os.getenv("USE_PGVECTOR", "true").lower() == "true",
@@ -218,8 +218,8 @@ def get_multi_tenancy_manager() -> MultiTenancyManager:
             llm_name=os.getenv("HIPPORAG_LLM_MODEL", "gpt-4o-mini"),
             embedding_model_name=os.getenv("HIPPORAG_EMBEDDING_MODEL", "text-embedding-3-small"),
             embedding_base_url=embedding_base_url,
-            # DGraph configuration
-            graph_library="dgraph",
+            # Graph library selection (igraph recommended, dgraph for distributed)
+            graph_library=os.getenv("GRAPH_LIBRARY", "igraph"),
             dgraph_config=dgraph_config,
             # pgvector configuration
             use_pgvector=os.getenv("USE_PGVECTOR", "true").lower() == "true",
