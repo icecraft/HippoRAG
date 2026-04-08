@@ -34,6 +34,7 @@ def _dump_qa_interaction(query: str, messages: list, response: str, metadata: di
 class QAEngine:
     """
     Handles question-answering operations.
+    """
 
     def __init__(self,
                  global_config: BaseConfig,
