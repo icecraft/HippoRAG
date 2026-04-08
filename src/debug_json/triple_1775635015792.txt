@@ -1,0 +1,10 @@
+# Error: Invalid \uXXXX escape: line 4 column 57 (char 135)
+# Source: triple
+
+{
+  "triples": [
+    ["\u5bb6\u8001", "is", "\u5357\u65b9\u7684\u5bb6\u8001"],
+    ["\u5bb6\u8001", "is different from", "\u8d64\u8109\u8 backgroud\u5bb6\u8001"],
+    ["\u5bb6\u8001", "is a concept", "different from \u8d64\u8109\u8303\u7684\u5bb6\u8001"]
+  ]
+}

@@ -1,13 +1,20 @@
 from .ner import one_shot_ner_paragraph, one_shot_ner_output
 from ...utils.llm_utils import convert_format_to_template
 
-ner_conditioned_re_system = """Your task is to construct an RDF (Resource Description Framework) graph from the given passages and named entity lists. 
-Respond with a JSON list of triples, with each triple representing a relationship in the RDF graph. 
+ner_conditioned_re_system = """Your task is to construct an RDF (Resource Description Framework) graph from the given passages and named entity lists.
+Respond with a JSON list of triples, with each triple representing a relationship in the RDF graph.
 
 Pay attention to the following requirements:
 - Each triple should contain at least one, but preferably two, of the named entities in the list for each passage.
 - Clearly resolve pronouns to their specific names to maintain clarity.
 
+You MUST respond with ONLY valid JSON in the following format, with no additional text:
+{"triples": [["subject1", "predicate1", "object1"], ["subject2", "predicate2", "object2"], ...]}
+
+CRITICAL: Your entire response must be valid JSON. Do NOT include any text before or after the JSON object.
+- Escape special characters properly (e.g., use \\\\ for backslashes, \\" for quotes inside strings).
+- Do NOT use unescaped backslashes, tabs, or control characters in string values.
+- Do NOT include comments, markdown formatting, or code fences in your response.
 """
 
 

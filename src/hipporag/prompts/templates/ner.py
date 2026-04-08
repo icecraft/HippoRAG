@@ -1,5 +1,13 @@
-ner_system = """Your task is to extract named entities from the given paragraph. 
+ner_system = """Your task is to extract named entities from the given paragraph.
 Respond with a JSON list of entities.
+
+You MUST respond with ONLY valid JSON in the following format, with no additional text:
+{"named_entities": ["entity1", "entity2", ...]}
+
+CRITICAL: Your entire response must be valid JSON. Do NOT include any text before or after the JSON object.
+- Escape special characters properly (e.g., use \\\\ for backslashes, \\" for quotes inside strings).
+- Do NOT use unescaped backslashes, tabs, or control characters in string values.
+- Do NOT include comments, markdown formatting, or code fences in your response.
 """
 
 one_shot_ner_paragraph = """Radio City

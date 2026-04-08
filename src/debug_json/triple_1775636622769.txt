@@ -1,0 +1,10 @@
+# Error: Invalid \uXXXX escape: line 5 column 14 (char 156)
+# Source: triple
+
+{
+  "triples": [
+    ["\u89d2\u4e09", "is", "\u8205\u7236\u548c\u8205\u6bcd\u7684\u52a0\u9501"],
+    ["\u8205\u7236", "uses", "\u89d2\u4e09"],
+    ["\u8205\u6bm5", "uses", "\u89d2\u4e09"]
+  ]
+}

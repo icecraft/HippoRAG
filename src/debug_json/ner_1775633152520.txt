@@ -1,0 +1,4 @@
+# Error: Expecting ',' delimiter: line 1 column 26 (char 25)
+# Source: ner
+
+{"named_entities": ["小主子"}]}

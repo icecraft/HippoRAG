@@ -1,0 +1,5 @@
+# Error: Expecting ',' delimiter: line 2 column 21 (char 34)
+# Source: triple
+
+{"triples": [
+    ["时间", "到了", ""]}

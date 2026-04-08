@@ -484,10 +484,20 @@ class Retriever:
             fact_row_dict = self.fact_embedding_store.get_rows(real_candidate_fact_ids)
             candidate_facts = []
             for fact_id in real_candidate_fact_ids:
+                raw_content = fact_row_dict[fact_id].get('content', '')
+                if not raw_content:
+                    logger.warning(f"Empty content for fact id {fact_id}")
+                    continue
                 try:
-                    candidate_facts.append(json.loads(fact_row_dict[fact_id]['content']))
-                except (json.JSONDecodeError, KeyError) as e:
+                    parsed = json.loads(raw_content)
+                    candidate_facts.append(parsed)
+                except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse fact content for id {fact_id}: {e}")
+                    logger.debug(f"  raw content (first 200 chars): {raw_content[:200]}")
+                    continue
+                except KeyError as e:
+                    logger.warning(f"Missing 'content' key for fact id {fact_id}: {e}")
+                    logger.debug(f"  fact_row_dict[{fact_id}]: {fact_row_dict.get(fact_id)}")
                     continue
             
             # Rerank the facts

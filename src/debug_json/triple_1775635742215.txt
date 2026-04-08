@@ -1,0 +1,9 @@
+# Error: Expecting ',' delimiter: line 4 column 37 (char 155)
+# Source: triple
+
+{"triples": [
+            ["方源", "is", "a person"],
+            ["方源", "is located at", "the entrance of the school"],
+            ["方源", "feels", "coldly")
+    ]
+}

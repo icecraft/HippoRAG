@@ -1,0 +1,5 @@
+# Error: Expecting ',' delimiter: line 2 column 31 (char 44)
+# Source: triple
+
+{"triples": [
+            ["鱼鳞蛊", "必定有", ""]}

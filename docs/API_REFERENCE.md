@@ -82,7 +82,7 @@ hipporag = HippoRAG(
 索引文档，构建知识图谱和嵌入向量。
 
 ```python
-index(docs: List[str]) -> None
+index(docs: List[str], progress_callback: Callable[[str, int, int], None] = None) -> None
 ```
 
 **参数**：
@@ -90,6 +90,18 @@ index(docs: List[str]) -> None
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `docs` | `List[str]` | 要索引的文档列表 |
+| `progress_callback` | `Callable[[stage, current, total], None]` | 可选的进度回调函数 |
+
+**进度阶段（stage）**：
+
+| 阶段 | 说明 |
+|------|------|
+| `embedding_chunks` | 文档嵌入 |
+| `openie` | 实体与关系抽取 |
+| `embedding_entities` | 实体嵌入 |
+| `embedding_facts` | 事实嵌入 |
+| `graph_construction` | 知识图谱构建 |
+| `completed` | 完成 |
 
 **示例**：
 
@@ -98,7 +110,15 @@ documents = [
     "苹果公司成立于1976年",
     "史蒂夫·乔布斯是苹果公司的联合创始人"
 ]
+
+# 基本用法
 hipporag.index(docs=documents)
+
+# 带进度回调
+def on_progress(stage, current, total):
+    print(f"[{current}/{total}] {stage}")
+
+hipporag.index(docs=documents, progress_callback=on_progress)
 ```
 
 ---

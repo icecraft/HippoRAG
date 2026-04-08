@@ -1,0 +1,9 @@
+# Error: Invalid \uXXXX escape: line 3 column 39 (char 55)
+# Source: triple
+
+{
+  "triples": [
+    ["\u65b9\u6e90", "cannot find", "\u81\u7269\u86cb\u86f9"],
+    ["\u65b9\u6e90", "cannot find", "\u4e09\u7c7b\u86cb\u86f9"]
+  ]
+}

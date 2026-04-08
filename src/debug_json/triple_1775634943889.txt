@@ -1,0 +1,11 @@
+# Error: Invalid \uXXXX escape: line 4 column 70 (char 155)
+# Source: triple
+
+{
+  "triples": [
+    ["\u5143\u77f3", "was bitten into", "\u5929\u7136\u771f\u5143"],
+    ["\u5929\u7136\u771f\u5143", "entered into", "\u5b83\u7684\u7a7a\u7窍"],
+    ["\u5b83", "bit", "\u5143\u77f3"],
+    ["\u5143\u77f3", "was broken into", "\u5929\u7136\u771f\u5143"]
+  ]
+}

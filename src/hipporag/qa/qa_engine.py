@@ -1,4 +1,7 @@
+import json
 import logging
+import os
+import time
 from typing import List, Dict, Tuple
 from tqdm import tqdm
 
@@ -9,19 +12,36 @@ from ..utils.misc_utils import QuerySolution
 
 logger = logging.getLogger(__name__)
 
+_DEBUG_QA_DIR = os.path.join(os.getcwd(), "debug_json")
+
+
+def _dump_qa_interaction(query: str, messages: list, response: str, metadata: dict):
+    """Dump QA prompt and response to file for debugging."""
+    os.makedirs(_DEBUG_QA_DIR, exist_ok=True)
+    filename = f"qa_{int(time.time() * 1000)}.json"
+    filepath = os.path.join(_DEBUG_QA_DIR, filename)
+    data = {
+        "query": query,
+        "messages": messages,
+        "response": response,
+        "metadata": metadata,
+    }
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    logger.info(f"Dumped QA interaction to {filepath}")
+
 
 class QAEngine:
     """
     Handles question-answering operations.
-    """
-    
+
     def __init__(self,
                  global_config: BaseConfig,
                  llm_model: BaseLLM,
                  prompt_template_manager: PromptTemplateManager):
         """
         Initialize QAEngine.
-        
+
         Args:
             global_config: Global configuration
             llm_model: LLM model instance
@@ -30,7 +50,7 @@ class QAEngine:
         self.global_config = global_config
         self.llm_model = llm_model
         self.prompt_template_manager = prompt_template_manager
-    
+
     def qa(self, queries: List[QuerySolution]) -> Tuple[List[QuerySolution], List[str], List[Dict]]:
         """
         Executes question-answering (QA) inference using a provided set of query solutions and a language model.
@@ -79,14 +99,26 @@ class QAEngine:
         queries_solutions = []
         for query_solution_idx, query_solution in tqdm(enumerate(queries), desc="Extraction Answers from LLM Response"):
             response_content = all_response_message[query_solution_idx]
+            metadata = all_metadata[query_solution_idx]
+            qa_messages = all_qa_messages[query_solution_idx]
+
+            # Dump QA prompt and response for debugging
+            _dump_qa_interaction(
+                query=query_solution.question,
+                messages=qa_messages,
+                response=response_content,
+                metadata=metadata,
+            )
+
             try:
                 pred_ans = response_content.split('Answer:')[1].strip()
             except Exception as e:
                 logger.warning(f"Error in parsing the answer from the raw LLM QA inference response: {str(e)}!")
+                logger.warning(f"  Query: {query_solution.question}")
+                logger.warning(f"  Raw response (first 500 chars): {response_content[:500]}")
                 pred_ans = response_content
 
             query_solution.answer = pred_ans
             queries_solutions.append(query_solution)
 
         return queries_solutions, all_response_message, all_metadata
-

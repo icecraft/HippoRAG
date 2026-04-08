@@ -1,0 +1,12 @@
+# Error: Invalid \uXXXX escape: line 7 column 31 (char 291)
+# Source: triple
+
+{
+  "named_entities": ["六块元石", "两块", "四块"],
+  "triples": [
+    ["\u5f53\u524d", "\u6709", "\u516d\u5757\u5143\u77f3"],
+    ["\u516d\u5757\u5143\u77f3", "(\u5df2\u7ed9\u5e94)", "\u4e24\u5757"],
+    ["\u516d\u5757\u5143\u77f3", "(\u5b58\u4f59)", "\u56db\u5757"],
+    ["\u56db\u5757", "(\u4e0d\u827)", "\u5143\u77f3"]
+  ]
+}

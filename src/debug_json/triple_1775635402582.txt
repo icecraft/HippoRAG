@@ -1,0 +1,11 @@
+# Error: Invalid \uXXXX escape: line 4 column 14 (char 79)
+# Source: triple
+
+{
+  "triples": [
+    ["\u8205\u7236", "stopped", "\u65b9\u6e90"],
+    ["\u8205\u6bm5", "stopped", "\u65b9\u6e90"],
+    ["\u65b9\u6e90", "was stopped by", "\u8205\u7236"],
+    ["\u65b9\u6e90", "was stopped by", "\u8205\u6bm5"]
+  ]
+}

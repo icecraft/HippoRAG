@@ -74,6 +74,45 @@ curl http://localhost:8000/health
 
 ### 索引端点
 
+#### `POST /index`
+异步索引文档（立即返回，后台处理）。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/index \
+  -H "Content-Type: application/json" \
+  -d '{
+    "docs": ["文档1", "文档2"]
+  }'
+```
+
+**响应：**
+```json
+{
+  "status": "accepted",
+  "message": "Started indexing 2 documents. Use /index/progress for real-time updates.",
+  "num_docs": 2
+}
+```
+
+#### `POST /index/upload`
+异步索引上传的文件（支持 .txt, .md, .json, .jsonl）。
+
+**请求：**
+```bash
+curl -X POST http://localhost:8000/index/upload \
+  -F "file=@documents.txt"
+```
+
+**响应：**
+```json
+{
+  "status": "accepted",
+  "message": "Started indexing 10 documents from documents.txt. Use /index/progress for real-time updates.",
+  "num_docs": 10
+}
+```
+
 #### `POST /index/sync`
 同步索引文档（等待完成）。
 
@@ -94,6 +133,46 @@ curl -X POST http://localhost:8000/index/sync \
   "num_docs": 1
 }
 ```
+
+#### `GET /index/progress`
+SSE 端点，实时获取索引进度（Server-Sent Events）。
+
+**使用示例：**
+```javascript
+const eventSource = new EventSource('http://localhost:8000/index/progress');
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data.progress.current_stage, data.progress.processed_docs);
+  if (data.done) eventSource.close();
+};
+```
+
+**SSE 数据格式：**
+```json
+{
+  "status": "indexing",
+  "message": "Indexing 10 documents...",
+  "progress": {
+    "total_docs": 10,
+    "processed_docs": 3,
+    "current_stage": "embedding_entities",
+    "error": null
+  }
+}
+```
+
+**进度阶段（current_stage）：**
+
+| 阶段 | 说明 | 进度参考 |
+|------|------|----------|
+| `starting` | 初始化 | 48% |
+| `embedding_chunks` | 文档嵌入 | 58% |
+| `openie` | 实体与关系抽取 | 68% |
+| `embedding_entities` | 实体嵌入 | 75% |
+| `embedding_facts` | 事实嵌入 | 82% |
+| `graph_construction` | 知识图谱构建 | 90% |
+| `completed` | 完成 | 100% |
+| `failed` | 失败 | - |
 
 ---
 

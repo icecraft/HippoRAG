@@ -1,0 +1,9 @@
+# Error: Invalid \uXXXX escape: line 3 column 37 (char 107)
+# Source: triple
+
+{"triples": [
+            ["\u9ed1\u6697\u4e2d", "is", "a situation"],
+            ["\u4ed6", "did not", "\u7%9D%80\u4E0B"],
+            ["\u4ed6", "sat", "\u76F4\u5750\u5728\u7%93%8A\u4E0A"]
+    ]
+}
