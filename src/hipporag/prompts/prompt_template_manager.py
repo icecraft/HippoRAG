@@ -14,15 +14,19 @@ logger = get_logger(__name__)
 @dataclass
 class PromptTemplateManager:
     # templates_dir: Optional[str] = field(
-    #     default=None, 
+    #     default=None,
     #     metadata={"help": "Directory containing template scripts. Default to the `templates` dir under dir whether this class is defined."}
     # )
     role_mapping: Dict[str, str] = field(
         default_factory=lambda: {"system": "system", "user": "user", "assistant": "assistant"},
         metadata={"help": "Mapping from default roles in prompte template files to specific LLM providers' defined roles."}
     )
+    locale: str = field(
+        default=None,
+        metadata={"help": "Locale suffix for template selection. e.g. 'chinese' will prefer 'ner_chinese' over 'ner'. None means use default templates."}
+    )
     templates: Dict[str, Union[Template, List[Dict[str, Any]]]] = field(
-        init=False, 
+        init=False,
         default_factory=dict,
         metadata={"help": "A dict from prompt template names to templates. A prompt template can be a Template instance or a chat history which is a list of dict with content as Template instance."}
     )
@@ -78,7 +82,7 @@ class PromptTemplateManager:
 
                     prompt_template = module.prompt_template
                     logger.debug(f"Loaded template from {module_name}")
-                    
+
                     if isinstance(prompt_template, Template):
                         self.templates[script_name] = prompt_template
                     elif isinstance(prompt_template, str):
@@ -101,6 +105,20 @@ class PromptTemplateManager:
                 except Exception as e:
                     logger.error(f"Failed to load template from '{module_name}.py': {e}")
                     raise
+
+        # Apply locale overrides: if locale is set, prefer 'name_locale' over 'name'
+        # e.g. with locale='chinese', 'ner_chinese' overrides 'ner'
+        if self.locale:
+            locale_suffix = f"_{self.locale}"
+            overridden = []
+            for name in list(self.templates.keys()):
+                if name.endswith(locale_suffix):
+                    base_name = name[:-len(locale_suffix)]
+                    if base_name in self.templates:
+                        self.templates[base_name] = self.templates[name]
+                        overridden.append(base_name)
+            if overridden:
+                logger.info(f"Applied locale '{self.locale}' overrides for templates: {overridden}")
 
     def render(self, name: str, **kwargs) -> Union[str, List[Dict[str, Any]]]:
         """

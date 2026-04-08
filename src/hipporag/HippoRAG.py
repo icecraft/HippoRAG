@@ -142,7 +142,12 @@ class HippoRAG:
             self.embedding_model, self.global_config, 'fact'
         )
 
-        self.prompt_template_manager = PromptTemplateManager(role_mapping={"system": "system", "user": "user", "assistant": "assistant"})
+        # Use dataset config as locale for template selection (e.g. 'chinese' -> prefer 'ner_chinese' over 'ner')
+        locale = self.global_config.dataset if self.global_config.dataset else None
+        self.prompt_template_manager = PromptTemplateManager(
+            role_mapping={"system": "system", "user": "user", "assistant": "assistant"},
+            locale=locale,
+        )
 
         self.openie_results_path = os.path.join(self.global_config.save_dir,f'openie_results_ner_{self.global_config.llm_name.replace("/", "_")}.json')
 
