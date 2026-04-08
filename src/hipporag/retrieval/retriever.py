@@ -493,7 +493,7 @@ class Retriever:
                     candidate_facts.append(parsed)
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse fact content for id {fact_id}: {e}")
-                    logger.debug(f"  raw content (first 200 chars): {raw_content[:200]}")
+                    logger.warning(f"  raw content: {raw_content}")
                     continue
                 except KeyError as e:
                     logger.warning(f"Missing 'content' key for fact id {fact_id}: {e}")

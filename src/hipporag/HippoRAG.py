@@ -885,6 +885,8 @@ class HippoRAG:
                     candidate_facts.append(json.loads(fact_row_dict[id]['content']))
                 except (json.JSONDecodeError, KeyError) as e:
                     logger.warning(f"Failed to parse fact content for id {id}: {e}")
+                    raw_content = fact_row_dict.get(id, {}).get('content', '')
+                    logger.warning(f"  raw content: {raw_content}")
                     # Skip invalid facts
                     continue
             
